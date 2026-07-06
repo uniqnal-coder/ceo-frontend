@@ -1,0 +1,236 @@
+/* Mobile Responsive Styles for CEO School System */
+
+/* Base mobile styles */
+@media (max-width: 768px) {
+  /* Dashboard layout */
+  .dashboard-layout {
+    flex-direction: column !important;
+  }
+
+  .dashboard-nav {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e5e7eb;
+    flex-direction: row !important;
+    overflow-x: auto;
+    padding: 10px !important;
+  }
+
+  .dashboard-nav button {
+    white-space: nowrap;
+    min-width: auto;
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Header */
+  .dashboard-header {
+    flex-direction: column !important;
+    gap: 15px;
+    align-items: flex-start !important;
+  }
+
+  .dashboard-header h1 {
+    font-size: 20px !important;
+  }
+
+  .user-info {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+
+  /* Tables */
+  .data-table-container {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    min-width: 800px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px !important;
+    font-size: 12px !important;
+  }
+
+  .data-table button {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+
+  /* Forms */
+  .form-row {
+    grid-template-columns: 1fr !important;
+    gap: 15px !important;
+  }
+
+  .form-container {
+    padding: 15px !important;
+  }
+
+  .form-card {
+    padding: 20px !important;
+  }
+
+  .form-actions {
+    flex-direction: column !important;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+
+  /* Stats cards */
+  .stats-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Add button */
+  .add-button {
+    position: fixed !important;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    border-radius: 50% !important;
+    width: 56px;
+    height: 56px;
+    padding: 0 !important;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+  }
+
+  /* Filter buttons */
+  .filter-container {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+
+  .filter-btn {
+    font-size: 12px !important;
+    padding: 6px 12px !important;
+  }
+
+  /* Content padding */
+  .dashboard-content {
+    padding: 15px !important;
+  }
+
+  .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 18px !important;
+  }
+}
+
+/* Tablet styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .dashboard-nav {
+    width: 200px !important;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 10px !important;
+    font-size: 13px !important;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .dashboard-header h1 {
+    font-size: 18px !important;
+  }
+
+  .user-info span {
+    font-size: 12px !important;
+  }
+
+  .badge {
+    font-size: 11px !important;
+    padding: 2px 8px !important;
+  }
+
+  .logout-btn {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+
+  .page-subtitle {
+    font-size: 12px !important;
+  }
+
+  .empty-state {
+    padding: 40px 15px !important;
+  }
+
+  .empty-state p {
+    font-size: 14px !important;
+  }
+}
+
+/* Landscape mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .dashboard-nav {
+    flex-direction: row !important;
+    width: 100% !important;
+    overflow-x: auto;
+  }
+
+  .form-card {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
+/* Print styles */
+@media print {
+  .dashboard-nav,
+  .add-button,
+  .filter-container,
+  .form-actions,
+  .action-buttons {
+    display: none !important;
+  }
+
+  .data-table {
+    font-size: 10px !important;
+  }
+
+  body {
+    background: white !important;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .data-table {
+    border: 2px solid #000 !important;
+  }
+
+  .data-table th,
+  .data-table td {
+    border: 1px solid #000 !important;
+  }
+
+  button {
+    border: 2px solid currentColor !important;
+  }
+}
