@@ -22,8 +22,8 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <aside className="flex w-64 flex-col bg-slate-950 text-slate-300">
-        <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-5">
+      <aside className="flex w-60 flex-col bg-slate-950 text-slate-300">
+        <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/15 text-lg text-green-400">
             <i className="fas fa-graduation-cap" />
           </span>
@@ -41,7 +41,7 @@ export default function Layout() {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                    `flex items-center gap-3 rounded-md px-3 py-2 text-[13px] transition ${
                       isActive
                         ? 'bg-green-500/15 font-semibold text-green-400'
                         : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
@@ -86,20 +86,38 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3.5">
-          <h2 className="truncate text-lg font-extrabold uppercase tracking-wide text-gray-800">
-            {current?.end ? 'CEO School – Full Management Control Center' : current?.label || 'Dashboard'}
-          </h2>
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 sm:flex">
+        <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-5 py-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-[15px] font-extrabold uppercase tracking-wide text-gray-800">
+              {current?.end ? 'CEO School – Full Management Control Center' : current?.label || 'Dashboard'}
+            </h2>
+            <nav className="mt-0.5 hidden items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:flex">
+              {[
+                { to: '/staff', label: 'HR' },
+                { to: '/students', label: 'Students' },
+                { to: '/attendance', label: 'Attendance' },
+                { to: '/tasks', label: 'Tasks' },
+                { to: '/evaluations', label: 'Reports' },
+                { to: '/salary', label: 'Rewards & Faults' },
+                { to: '/fees', label: 'Finance' },
+              ].map((l, i) => (
+                <span key={l.to} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-gray-300">·</span>}
+                  <Link to={l.to} className="transition hover:text-blue-600">{l.label}</Link>
+                </span>
+              ))}
+            </nav>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="hidden items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 sm:flex">
               <i className="far fa-calendar text-gray-400" />
               {new Date().toLocaleDateString(undefined, { dateStyle: 'medium' })}
             </span>
             <Link
               to="/tasks"
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+              className="rounded-md bg-green-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-green-700"
             >
-              <i className="fas fa-bolt mr-2" />
+              <i className="fas fa-bolt mr-1.5" />
               Quick Action
             </Link>
           </div>
