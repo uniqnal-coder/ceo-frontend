@@ -1,5 +1,17 @@
 ﻿@import 'tailwindcss';
 
+/* Brand palette sampled directly from the SchoolOS / Teachnal reference PDF. */
+@theme {
+  --color-brand: #188a54;
+  --color-brand-dark: #12703f;
+  --color-brand-soft: #e6f3ec;
+  --color-navy: #0c2a48;
+  --color-kpi-blue: #3066b4;
+  --color-kpi-sky: #3f84cc;
+  --color-kpi-green: #36a860;
+  --color-kpi-gold: #e0a82c;
+}
+
 * {
   margin: 0;
   padding: 0;

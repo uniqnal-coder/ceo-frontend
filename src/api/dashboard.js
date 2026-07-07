@@ -17,6 +17,7 @@ export async function fetchDashboard() {
     staff,
     tasks,
     attendanceToday,
+    attendanceAll,
     notifications,
     fees,
     salary,
@@ -27,6 +28,7 @@ export async function fetchDashboard() {
     api.get('/api/staff?page=1&limit=500'),
     api.get('/api/tasks?page=1&limit=200&sortBy=created_at&order=desc'),
     api.get(`/api/attendance/date/${todayISO()}`),
+    api.get('/api/attendance?page=1&limit=2000&sortBy=date&order=desc'),
     api.get('/api/notifications'),
     api.get('/api/fees?page=1&limit=1000'),
     api.get('/api/salary?page=1&limit=200'),
@@ -46,6 +48,7 @@ export async function fetchDashboard() {
     tasks: toArray(tasksRes ?? []),
     tasksTotal: tasksRes?.pagination?.total ?? toArray(tasksRes ?? []).length,
     attendanceToday: toArray(settle(attendanceToday, [])),
+    attendanceAll: toArray(settle(attendanceAll, [])),
     notifications: toArray(settle(notifications, [])),
     fees: toArray(settle(fees, [])),
     salary: toArray(settle(salary, null) ?? []),
@@ -54,6 +57,13 @@ export async function fetchDashboard() {
     biometryDenied: biometry.status === 'rejected',
     health: settle(health, { status: 'unreachable', database: 'unknown' }),
   }
+}
+
+// Mark every unread notification as read (best-effort, parallel).
+export async function markAllNotificationsRead(notifications) {
+  const unread = notifications.filter((n) => !n.read)
+  await Promise.allSettled(unread.map((n) => api.put(`/api/notifications/${n.id}`, { read: true })))
+  return unread.length
 }
 
 // ---- pure helpers (aggregation on already-fetched rows) ----
@@ -115,6 +125,31 @@ export function feeTrend(fees, days = 7) {
     if (!f.date) continue
     const key = new Date(f.date).toISOString().slice(0, 10)
     if (index.has(key)) buckets[index.get(key)].value += Number(f.paid) || 0
+  }
+  return buckets
+}
+
+// Daily attendance trend for the last `days` days → present/absent series.
+// Built from the full attendance list so the chart reflects real records.
+export function attendanceTrend(records, days = 7) {
+  const buckets = []
+  const index = new Map()
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const label = d.toLocaleDateString(undefined, { weekday: 'short' })
+    index.set(key, buckets.length)
+    buckets.push({ label, present: 0, absent: 0 })
+  }
+  for (const r of records) {
+    if (!r.date) continue
+    const key = new Date(r.date).toISOString().slice(0, 10)
+    if (!index.has(key)) continue
+    const bucket = buckets[index.get(key)]
+    const s = norm(r.status)
+    if (s === 'present' || s === 'late') bucket.present += 1
+    else bucket.absent += 1
   }
   return buckets
 }
