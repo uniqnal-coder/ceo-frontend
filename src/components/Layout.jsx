@@ -1,17 +1,17 @@
-import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
-  { to: '/students', label: 'Student Management', icon: 'fa-user-graduate' },
-  { to: '/staff', label: 'HR Management', icon: 'fa-chalkboard-user' },
-  { to: '/attendance', label: 'Attendance Monitor', icon: 'fa-user-check', sub: 'Camera & Biometry' },
-  { to: '/tasks', label: 'Daily Tasks', icon: 'fa-list-check' },
-  { to: '/fees', label: 'Finance Management', icon: 'fa-file-invoice-dollar' },
-  { to: '/salary', label: 'Rewards & Faults', icon: 'fa-award' },
-  { to: '/feedback', label: 'Feedback', icon: 'fa-comments' },
-  { to: '/biometry', label: 'Biometry Devices', icon: 'fa-fingerprint' },
-  { to: '/evaluations', label: 'Evaluations', icon: 'fa-chart-line' },
+  { to: '/', label: 'Dashboard', icon: '🏠', end: true },
+  { to: '/students', label: 'Students', icon: '👨‍🎓' },
+  { to: '/staff', label: 'Staff', icon: '👨‍🏫' },
+  { to: '/fees', label: 'Fees', icon: '💰' },
+  { to: '/tasks', label: 'Tasks', icon: '📋' },
+  { to: '/attendance', label: 'Attendance', icon: '👥' },
+  { to: '/feedback', label: 'Feedback', icon: '💬' },
+  { to: '/salary', label: 'Salary', icon: '💵' },
+  { to: '/biometry', label: 'Biometry', icon: '👆' },
+  { to: '/evaluations', label: 'Evaluations', icon: '📊' },
 ];
 
 export default function Layout() {
@@ -22,115 +22,59 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <aside className="flex w-60 flex-col bg-slate-950 text-slate-300">
-        <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-4">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/15 text-lg text-green-400">
-            <i className="fas fa-graduation-cap" />
-          </span>
-          <div className="leading-tight">
-            <h1 className="text-base font-extrabold tracking-wide text-white">CEO SCHOOL</h1>
-            <p className="text-[11px] uppercase tracking-widest text-slate-500">Management System</p>
-          </div>
+      <aside className="w-64 bg-gradient-to-b from-indigo-900 to-blue-900 text-white shadow-lg flex flex-col">
+        <div className="p-6 border-b border-indigo-700">
+          <h1 className="text-2xl font-bold">🎓 CEO School</h1>
+          <p className="text-sm text-indigo-300 mt-2">Management System</p>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <ul className="space-y-1">
+        <nav className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-2">
             {navItems.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-md px-3 py-2 text-[13px] transition ${
-                      isActive
-                        ? 'bg-green-500/15 font-semibold text-green-400'
-                        : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
-                    }`
-                  }
-                >
-                  <i className={`fas ${item.icon} w-4 text-center`} />
-                  <span className="min-w-0">
-                    <span className="block truncate leading-tight">{item.label}</span>
-                    {item.sub && (
-                      <span className="block text-[10px] leading-tight text-slate-500">({item.sub})</span>
-                    )}
-                  </span>
-                </NavLink>
-              </li>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `block w-full text-left px-4 py-3 rounded-lg transition ${
+                    isActive ? 'bg-cyan-500 text-white shadow-lg' : 'text-indigo-100 hover:bg-indigo-800'
+                  }`
+                }
+              >
+                <span className="mr-2">{item.icon}</span>
+                {item.label}
+              </NavLink>
             ))}
-          </ul>
+          </div>
         </nav>
 
-        <div className="border-t border-slate-800 p-4">
-          <div className="mb-3 flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 font-bold text-green-400">
-              {(user?.name || user?.email || '?').slice(0, 1).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{user?.name || user?.email || 'User'}</p>
-              <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                {user?.role === 'admin' ? 'Super Administrator' : user?.role || 'Member'}
-              </p>
-            </div>
+        <div className="p-4 border-t border-indigo-700">
+          <div className="bg-indigo-800 rounded-lg p-4 mb-4">
+            <p className="text-sm text-indigo-300">Logged in as</p>
+            <p className="text-white font-semibold truncate">{user?.email || 'User'}</p>
+            <p className="text-xs text-indigo-300">{user?.role || 'Role'}</p>
           </div>
           <button
             onClick={logout}
-            className="w-full rounded-lg border border-slate-700 py-2 text-sm font-medium text-slate-300 transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+            className="w-full bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition"
           >
-            <i className="fas fa-arrow-right-from-bracket mr-2" />
-            Logout
+            🚪 Logout
           </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-5 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-extrabold uppercase tracking-wide text-gray-800">
-              {current?.end ? 'CEO School – Full Management Control Center' : current?.label || 'Dashboard'}
-            </h2>
-            <nav className="mt-0.5 hidden items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:flex">
-              {[
-                { to: '/staff', label: 'HR' },
-                { to: '/students', label: 'Students' },
-                { to: '/attendance', label: 'Attendance' },
-                { to: '/tasks', label: 'Tasks' },
-                { to: '/evaluations', label: 'Reports' },
-                { to: '/salary', label: 'Rewards & Faults' },
-                { to: '/fees', label: 'Finance' },
-              ].map((l, i) => (
-                <span key={l.to} className="flex items-center gap-1">
-                  {i > 0 && <span className="text-gray-300">·</span>}
-                  <Link to={l.to} className="transition hover:text-blue-600">{l.label}</Link>
-                </span>
-              ))}
-            </nav>
-          </div>
-          <div className="flex shrink-0 items-center gap-2.5">
-            <span className="hidden items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 sm:flex">
-              <i className="far fa-calendar text-gray-400" />
-              {new Date().toLocaleDateString(undefined, { dateStyle: 'medium' })}
-            </span>
-            <Link
-              to="/tasks"
-              className="rounded-md bg-green-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-green-700"
-            >
-              <i className="fas fa-bolt mr-1.5" />
-              Quick Action
-            </Link>
-          </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white shadow-md px-8 py-4 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-800">
+            {current ? `${current.icon} ${current.label}` : '🎓 Dashboard'}
+          </h2>
+          <span className="text-gray-600">📅 {new Date().toLocaleDateString()}</span>
         </header>
 
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>
-
-        <footer className="flex items-center justify-between border-t border-slate-800 bg-slate-950 px-6 py-2 text-[11px] text-slate-500">
-          <span>CEO SCHOOL v2.0.0 — Full Management Control System</span>
-          <span>© {new Date().getFullYear()} CEO School. All rights reserved.</span>
-        </footer>
       </div>
     </div>
   );
