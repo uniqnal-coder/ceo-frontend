@@ -6,7 +6,7 @@ import { api, toArray } from '../api/client'
 const REMINDERS = ['Tuition-paid', 'Pending', 'Overdue', 'Partial']
 
 const reminderColor = (r) =>
-  r === 'Tuition-paid' ? '#10b981' : r === 'Overdue' ? '#ef4444' : r === 'Partial' ? '#3b82f6' : '#f59e0b'
+  r === 'Tuition-paid' ? '#10b981' : r === 'Overdue' ? '#ef4444' : r === 'Partial' ? '#3066b4' : '#f59e0b'
 
 export default function Fees() {
   const [fees, setFees] = useState([])
@@ -89,7 +89,7 @@ export default function Fees() {
           <div style={styles.statLabel}>Total Paid</div>
           <div style={{ ...styles.statValue, color: '#10b981' }}>${totalPaid.toLocaleString()}</div>
         </div>
-        <div style={{ ...styles.statCard, borderLeft: '4px solid #3b82f6' }}>
+        <div style={{ ...styles.statCard, borderLeft: '4px solid #3066b4' }}>
           <div style={styles.statLabel}>Records</div>
           <div style={styles.statValue}>{filteredFees.length}</div>
         </div>
@@ -98,7 +98,7 @@ export default function Fees() {
       <div style={styles.filterContainer}>
         <button
           onClick={() => setFilter('all')}
-          style={{ ...styles.filterBtn, backgroundColor: filter === 'all' ? '#1e40af' : '#e5e7eb', color: filter === 'all' ? 'white' : '#374151' }}
+          style={{ ...styles.filterBtn, backgroundColor: filter === 'all' ? '#188a54' : '#e5e7eb', color: filter === 'all' ? 'white' : '#374151' }}
         >
           All ({fees.length})
         </button>
@@ -262,31 +262,31 @@ const styles = {
   container: { padding: '20px', maxWidth: '1400px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
   subtitle: { color: '#666', margin: '5px 0 0 0' },
-  addButton: { padding: '10px 20px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
+  addButton: { padding: '10px 20px', backgroundColor: '#188a54', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   statsContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' },
-  statCard: { backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  statCard: { backgroundColor: 'white', padding: '20px', borderRadius: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   statLabel: { fontSize: '12px', color: '#666', textTransform: 'uppercase', marginBottom: '8px' },
   statValue: { fontSize: '24px', fontWeight: 'bold', color: '#1f2937' },
   filterContainer: { display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' },
   filterBtn: { padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   loading: { textAlign: 'center', padding: '40px', color: '#666' },
   error: { color: '#dc2626', padding: '15px', backgroundColor: '#fee2e2', borderRadius: '6px', margin: '20px 0' },
-  empty: { textAlign: 'center', padding: '60px 20px', backgroundColor: '#f9fafb', borderRadius: '8px' },
-  emptyButton: { marginTop: '15px', padding: '10px 24px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-  tableContainer: { backgroundColor: 'white', borderRadius: '8px', overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  empty: { textAlign: 'center', padding: '60px 20px', backgroundColor: '#f9fafb', borderRadius: '14px' },
+  emptyButton: { marginTop: '15px', padding: '10px 24px', backgroundColor: '#188a54', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' },
+  tableContainer: { backgroundColor: 'white', borderRadius: '14px', overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   table: { width: '100%', borderCollapse: 'collapse' },
   nameCell: { fontWeight: '500' },
   amountCell: { fontWeight: '600', color: '#059669' },
   badge: { padding: '4px 12px', borderRadius: '12px', fontSize: '12px', color: 'white', fontWeight: '500', display: 'inline-block' },
-  editBtn: { padding: '6px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', marginRight: '8px' },
+  editBtn: { padding: '6px 12px', backgroundColor: '#3066b4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', marginRight: '8px' },
   deleteBtn: { padding: '6px 12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
   formContainer: { padding: '20px', maxWidth: '700px', margin: '0 auto' },
-  formCard: { backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
+  formCard: { backgroundColor: 'white', padding: '30px', borderRadius: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' },
   form: { marginTop: '20px' },
   formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' },
   formGroup: { marginBottom: '20px' },
   input: { width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' },
   formActions: { display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px' },
   cancelBtn: { padding: '10px 20px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' },
-  saveBtn: { padding: '10px 20px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' },
+  saveBtn: { padding: '10px 20px', backgroundColor: '#188a54', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' },
 }

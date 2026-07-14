@@ -372,7 +372,7 @@ const styles = {
   },
   addButton: {
     padding: '10px 20px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -396,12 +396,12 @@ const styles = {
     textAlign: 'center',
     padding: '60px 20px',
     backgroundColor: '#f9fafb',
-    borderRadius: '8px'
+    borderRadius: '14px'
   },
   emptyButton: {
     marginTop: '15px',
     padding: '10px 24px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -409,7 +409,7 @@ const styles = {
   },
   tableContainer: {
     backgroundColor: 'white',
-    borderRadius: '8px',
+    borderRadius: '14px',
     overflow: 'hidden',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
   },
@@ -433,7 +433,7 @@ const styles = {
   },
   editBtn: {
     padding: '6px 12px',
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#3066b4',
     color: 'white',
     border: 'none',
     borderRadius: '4px',
@@ -458,7 +458,7 @@ const styles = {
   formCard: {
     backgroundColor: 'white',
     padding: '30px',
-    borderRadius: '8px',
+    borderRadius: '14px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   },
   form: {
@@ -498,7 +498,7 @@ const styles = {
   },
   saveBtn: {
     padding: '10px 20px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
