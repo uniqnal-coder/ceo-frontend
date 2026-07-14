@@ -152,6 +152,8 @@ function StudentForm({ student, onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const [account, setAccount] = useState(null)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -161,7 +163,19 @@ function StudentForm({ student, onClose }) {
       if (student) {
         await api.put(`/api/students/${student.id}`, formData)
       } else {
-        await api.post('/api/students', formData)
+        const created = await api.post('/api/students', formData)
+        // New students with an email get a mobile-app login; show the
+        // one-time temporary password so the admin can hand it over.
+        if (created?.account?.tempPassword) {
+          setAccount(created.account)
+          toast.success('Student added')
+          return
+        }
+        if (created?.account?.error) {
+          toast.error(`Student added, but no app login: ${created.account.error}`)
+          onClose()
+          return
+        }
       }
       toast.success(student ? 'Student updated' : 'Student added')
       onClose()
@@ -170,6 +184,10 @@ function StudentForm({ student, onClose }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  if (account) {
+    return <TempPasswordDialog account={account} onDone={onClose} />
   }
 
   return (
@@ -324,7 +342,7 @@ const styles = {
   },
   addButton: {
     padding: '10px 20px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -348,12 +366,12 @@ const styles = {
     textAlign: 'center',
     padding: '60px 20px',
     backgroundColor: '#f9fafb',
-    borderRadius: '8px'
+    borderRadius: '14px'
   },
   emptyButton: {
     marginTop: '15px',
     padding: '10px 24px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -361,7 +379,7 @@ const styles = {
   },
   tableContainer: {
     backgroundColor: 'white',
-    borderRadius: '8px',
+    borderRadius: '14px',
     overflow: 'hidden',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
   },
@@ -381,7 +399,7 @@ const styles = {
   },
   editBtn: {
     padding: '6px 12px',
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#3066b4',
     color: 'white',
     border: 'none',
     borderRadius: '4px',
@@ -406,7 +424,7 @@ const styles = {
   formCard: {
     backgroundColor: 'white',
     padding: '30px',
-    borderRadius: '8px',
+    borderRadius: '14px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   },
   form: {
@@ -446,11 +464,72 @@ const styles = {
   },
   saveBtn: {
     padding: '10px 20px',
-    backgroundColor: '#1e40af',
+    backgroundColor: '#188a54',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
     fontWeight: '500'
   }
+}
+
+
+/**
+ * One-time reveal of a newly provisioned student login. The password is
+ * never shown again, so the admin copies it before closing.
+ */
+function TempPasswordDialog({ account, onDone }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(account.tempPassword)
+      setCopied(true)
+    } catch {
+      /* selection fallback below */
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
+          <i className="fas fa-key" />
+        </div>
+        <h2 className="text-[16px] font-bold text-slate-800">Student app login created</h2>
+        <p className="mt-1 text-[12.5px] text-slate-500">
+          Give these to the student. This password is shown <b>only once</b> —
+          they will set their own on first login.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+            <p className="select-all text-[13.5px] font-semibold text-slate-700">{account.email}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Temporary password</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="select-all font-mono text-[16px] font-bold tracking-wide text-slate-800">
+                {account.tempPassword}
+              </p>
+              <button
+                onClick={copy}
+                className="rounded-lg bg-brand px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-brand-dark"
+              >
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onDone}
+          className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-[13px] font-semibold text-slate-600 transition hover:bg-slate-50"
+        >
+          Done — I saved the password
+        </button>
+      </div>
+    </div>
+  )
 }
