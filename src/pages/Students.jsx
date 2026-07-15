@@ -8,6 +8,7 @@ export default function Students() {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
+  const [monitorStudent, setMonitorStudent] = useState(null)
 
   useEffect(() => {
     fetchStudents()
@@ -114,6 +115,12 @@ export default function Students() {
                   </td>
                   <td>
                     <button
+                      onClick={() => setMonitorStudent(student)}
+                      style={styles.monitorBtn}
+                    >
+                      📊 Monitor
+                    </button>
+                    <button
                       onClick={() => handleEdit(student)}
                       style={styles.editBtn}
                     >
@@ -132,7 +139,281 @@ export default function Students() {
           </table>
         </div>
       )}
+
+      {monitorStudent && (
+        <StudentMonitorDialog
+          student={monitorStudent}
+          onClose={() => setMonitorStudent(null)}
+        />
+      )}
     </div>
+  )
+}
+
+const MONITOR_TABS = [
+  { key: 'reports', label: 'Daily Reports', icon: 'fa-file-lines' },
+  { key: 'tasks', label: 'Tasks', icon: 'fa-list-check' },
+  { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
+]
+
+function StudentMonitorDialog({ student, onClose }) {
+  const [tab, setTab] = useState('reports')
+  const userId = student.user_id
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-[16px] font-bold text-slate-800">📊 {student.name}</h2>
+            <p className="text-[12px] text-slate-500">
+              {student.department || '—'} · Stage {student.stage || '—'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-2.5 py-1 text-[18px] leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            ×
+          </button>
+        </div>
+
+        {!userId ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-[14px] font-semibold text-slate-700">No app login yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-slate-500">
+              This student was added before app logins existed, so there is no
+              activity to show. Students created from the Add Student form get a
+              login (and appear here) automatically.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-1 px-6 pt-3">
+              {MONITOR_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`rounded-t-xl px-4 py-2 text-[12.5px] font-semibold transition ${
+                    tab === t.key
+                      ? 'bg-brand text-white'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <i className={`fas ${t.icon} mr-1.5`} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-[280px] flex-1 overflow-y-auto border-t border-slate-100 px-6 py-4">
+              {tab === 'reports' && <StudentReportsTab userId={userId} />}
+              {tab === 'tasks' && <StudentTasksTab userId={userId} studentName={student.name} />}
+              {tab === 'checkins' && <StudentCheckinsTab userId={userId} />}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function useFetchList(path) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  const reload = async () => {
+    try {
+      setError('')
+      setRows(toArray(await api.get(path)))
+    } catch (err) {
+      setError(err.message)
+      setRows([])
+    }
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path])
+
+  return { rows, error, reload }
+}
+
+function TabStatus({ rows, error, emptyText }) {
+  if (error) return <p className="py-8 text-center text-[13px] text-red-500">{error}</p>
+  if (rows === null) return <p className="py-8 text-center text-[13px] text-slate-400">Loading…</p>
+  if (rows.length === 0) return <p className="py-8 text-center text-[13px] text-slate-400">{emptyText}</p>
+  return null
+}
+
+function StudentReportsTab({ userId }) {
+  const { rows, error } = useFetchList(`/api/daily-reports/user/${userId}`)
+  const status = <TabStatus rows={rows} error={error} emptyText="No reports submitted yet." />
+  if (rows === null || error || rows?.length === 0) return status
+
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => (
+        <div key={r.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-[12.5px] font-bold text-slate-700">
+              📅 {new Date(r.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+            {r.tasks_total > 0 && (
+              <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-[11px] font-semibold text-brand">
+                {r.tasks_completed}/{r.tasks_total} tasks
+              </span>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600">{r.content}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function StudentTasksTab({ userId, studentName }) {
+  const { rows, error, reload } = useFetchList(`/api/student-tasks/user/${userId}`)
+  const [showAssign, setShowAssign] = useState(false)
+  const [form, setForm] = useState({ title: '', description: '', due_date: '' })
+  const [saving, setSaving] = useState(false)
+
+  const assign = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return
+    setSaving(true)
+    try {
+      await api.post('/api/student-tasks', {
+        user_id: userId,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        due_date: form.due_date || new Date().toISOString().slice(0, 10),
+      })
+      toast.success(`Task assigned to ${studentName}`)
+      setForm({ title: '', description: '', due_date: '' })
+      setShowAssign(false)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const statusColor = (s) =>
+    s === 'Completed'
+      ? 'bg-emerald-100 text-emerald-700'
+      : s === 'In Progress'
+        ? 'bg-amber-100 text-amber-700'
+        : 'bg-slate-200 text-slate-600'
+
+  return (
+    <div>
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={() => setShowAssign((v) => !v)}
+          className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-brand-dark"
+        >
+          {showAssign ? 'Cancel' : '➕ Assign Task'}
+        </button>
+      </div>
+
+      {showAssign && (
+        <form onSubmit={assign} className="mb-4 space-y-2.5 rounded-xl border border-brand/30 bg-brand-soft/40 p-4">
+          <input
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Task title *"
+            required
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+          />
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Description (optional)"
+            rows={2}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+          />
+          <div className="flex items-center gap-3">
+            <input
+              type="date"
+              value={form.due_date}
+              onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+            >
+              {saving ? 'Assigning…' : 'Assign'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <TabStatus rows={rows} error={error} emptyText="No tasks assigned yet." />
+      {rows?.length > 0 && (
+        <div className="space-y-2">
+          {rows.map((t) => (
+            <div key={t.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 p-3.5">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-slate-700">{t.title}</p>
+                {t.description && (
+                  <p className="mt-0.5 text-[12px] text-slate-500">{t.description}</p>
+                )}
+                {t.due_date && (
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Due {new Date(t.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </p>
+                )}
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusColor(t.status)}`}>
+                {t.status || 'Pending'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StudentCheckinsTab({ userId }) {
+  const { rows, error } = useFetchList(`/api/checkins/user/${userId}`)
+  const status = <TabStatus rows={rows} error={error} emptyText="No check-ins recorded yet." />
+  if (rows === null || error || rows?.length === 0) return status
+
+  const fmtTime = (iso) =>
+    iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'
+
+  return (
+    <table className="w-full text-left text-[12.5px]">
+      <thead>
+        <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-400">
+          <th className="py-2 pr-3">Date</th>
+          <th className="py-2 pr-3">Check-in</th>
+          <th className="py-2 pr-3">Check-out</th>
+          <th className="py-2">Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((c) => (
+          <tr key={c.id} className="border-b border-slate-100">
+            <td className="py-2.5 pr-3 font-semibold text-slate-700">
+              {new Date(c.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </td>
+            <td className="py-2.5 pr-3 text-emerald-600">{fmtTime(c.check_in_time)}</td>
+            <td className="py-2.5 pr-3 text-slate-600">{fmtTime(c.check_out_time)}</td>
+            <td className="py-2.5">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 uppercase">
+                {c.method || 'manual'}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -396,6 +677,16 @@ const styles = {
     fontSize: '12px',
     color: 'white',
     fontWeight: '500'
+  },
+  monitorBtn: {
+    padding: '6px 12px',
+    backgroundColor: '#0d9488',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    marginRight: '8px'
   },
   editBtn: {
     padding: '6px 12px',
