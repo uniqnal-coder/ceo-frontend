@@ -9,6 +9,7 @@ export default function Staff() {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
+  const [monitorStaff, setMonitorStaff] = useState(null)
 
   useEffect(() => {
     fetchStaff()
@@ -117,6 +118,12 @@ export default function Staff() {
                   </td>
                   <td>
                     <button
+                      onClick={() => setMonitorStaff(member)}
+                      style={styles.monitorBtn}
+                    >
+                      📚 Lessons
+                    </button>
+                    <button
                       onClick={() => handleEdit(member)}
                       style={styles.editBtn}
                     >
@@ -135,7 +142,280 @@ export default function Staff() {
           </table>
         </div>
       )}
+
+      {monitorStaff && (
+        <StaffMonitorDialog
+          member={monitorStaff}
+          onClose={() => setMonitorStaff(null)}
+        />
+      )}
     </div>
+  )
+}
+
+const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function StaffMonitorDialog({ member, onClose }) {
+  const [tab, setTab] = useState('lessons')
+  const userId = member.user_id
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-[16px] font-bold text-slate-800">👩‍🏫 {member.name}</h2>
+            <p className="text-[12px] text-slate-500">
+              {member.role || 'Teacher'} · {member.department || '—'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-2.5 py-1 text-[18px] leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            ×
+          </button>
+        </div>
+
+        {!userId ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-[14px] font-semibold text-slate-700">No app login yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-slate-500">
+              Edit this staff member and add an <b>email</b> — saving creates a
+              teacher app login with a one-time temporary password, and lessons
+              can then be assigned here.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-1 px-6 pt-3">
+              {[
+                { key: 'lessons', label: 'Lessons', icon: 'fa-book-open' },
+                { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`rounded-t-xl px-4 py-2 text-[12.5px] font-semibold transition ${
+                    tab === t.key ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <i className={`fas ${t.icon} mr-1.5`} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-[280px] flex-1 overflow-y-auto border-t border-slate-100 px-6 py-4">
+              {tab === 'lessons' && <TeacherLessonsTab userId={userId} teacherName={member.name} />}
+              {tab === 'checkins' && <TeacherCheckinsTab userId={userId} />}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function useFetchList(path) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  const reload = async () => {
+    try {
+      setError('')
+      setRows(toArray(await api.get(path)))
+    } catch (err) {
+      setError(err.message)
+      setRows([])
+    }
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path])
+
+  return { rows, error, reload }
+}
+
+function TeacherLessonsTab({ userId, teacherName }) {
+  const { rows, error, reload } = useFetchList(`/api/lessons/user/${userId}`)
+  const [showAssign, setShowAssign] = useState(false)
+  const [form, setForm] = useState({
+    subject: '', grade: '', room: '', day_of_week: '1', start_time: '08:00', end_time: '08:45',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const assign = async (e) => {
+    e.preventDefault()
+    if (!form.subject.trim()) return
+    setSaving(true)
+    try {
+      await api.post('/api/lessons', {
+        teacher_user_id: userId,
+        subject: form.subject.trim(),
+        grade: form.grade.trim(),
+        room: form.room.trim(),
+        day_of_week: parseInt(form.day_of_week, 10),
+        start_time: form.start_time,
+        end_time: form.end_time,
+      })
+      toast.success(`Lesson added for ${teacherName}`)
+      setForm({ ...form, subject: '', grade: '', room: '' })
+      setShowAssign(false)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeLesson = async (id) => {
+    if (!confirm('Remove this lesson?')) return
+    try {
+      await api.del(`/api/lessons/${id}`)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={() => setShowAssign((v) => !v)}
+          className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-brand-dark"
+        >
+          {showAssign ? 'Cancel' : '➕ Add Lesson'}
+        </button>
+      </div>
+
+      {showAssign && (
+        <form onSubmit={assign} className="mb-4 space-y-2.5 rounded-xl border border-brand/30 bg-brand-soft/40 p-4">
+          <div className="grid grid-cols-3 gap-2.5">
+            <input
+              value={form.subject}
+              onChange={(e) => setForm({ ...form, subject: e.target.value })}
+              placeholder="Subject *"
+              required
+              className="col-span-3 rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <input
+              value={form.grade}
+              onChange={(e) => setForm({ ...form, grade: e.target.value })}
+              placeholder="Grade (e.g. Grade 8)"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <input
+              value={form.room}
+              onChange={(e) => setForm({ ...form, room: e.target.value })}
+              placeholder="Room"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <select
+              value={form.day_of_week}
+              onChange={(e) => setForm({ ...form, day_of_week: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            >
+              {DAY_NAMES.slice(1).map((d, i) => (
+                <option key={d} value={i + 1}>{d}</option>
+              ))}
+            </select>
+            <input
+              type="time"
+              value={form.start_time}
+              onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <input
+              type="time"
+              value={form.end_time}
+              onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+          >
+            {saving ? 'Adding…' : 'Add Lesson'}
+          </button>
+        </form>
+      )}
+
+      {error && <p className="py-8 text-center text-[13px] text-red-500">{error}</p>}
+      {rows === null && !error && <p className="py-8 text-center text-[13px] text-slate-400">Loading…</p>}
+      {rows?.length === 0 && !error && (
+        <p className="py-8 text-center text-[13px] text-slate-400">No lessons scheduled yet.</p>
+      )}
+      {rows?.length > 0 && (
+        <div className="space-y-2">
+          {rows.map((l) => (
+            <div key={l.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3.5">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-slate-700">
+                  {l.subject}{l.grade ? ` — ${l.grade}` : ''}
+                </p>
+                <p className="mt-0.5 text-[12px] text-slate-500">
+                  {DAY_NAMES[l.day_of_week] || ''} · {String(l.start_time).slice(0, 5)}–{String(l.end_time).slice(0, 5)}
+                  {l.room ? ` · Room ${l.room}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => removeLesson(l.id)}
+                className="shrink-0 rounded-lg px-2 py-1 text-[12px] text-red-500 transition hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TeacherCheckinsTab({ userId }) {
+  const { rows, error } = useFetchList(`/api/checkins/user/${userId}`)
+
+  if (error) return <p className="py-8 text-center text-[13px] text-red-500">{error}</p>
+  if (rows === null) return <p className="py-8 text-center text-[13px] text-slate-400">Loading…</p>
+  if (rows.length === 0)
+    return <p className="py-8 text-center text-[13px] text-slate-400">No check-ins recorded yet.</p>
+
+  const fmtTime = (iso) =>
+    iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'
+
+  return (
+    <table className="w-full text-left text-[12.5px]">
+      <thead>
+        <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-400">
+          <th className="py-2 pr-3">Date</th>
+          <th className="py-2 pr-3">Check-in</th>
+          <th className="py-2 pr-3">Check-out</th>
+          <th className="py-2">Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((c) => (
+          <tr key={c.id} className="border-b border-slate-100">
+            <td className="py-2.5 pr-3 font-semibold text-slate-700">
+              {new Date(c.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </td>
+            <td className="py-2.5 pr-3 text-emerald-600">{fmtTime(c.check_in_time)}</td>
+            <td className="py-2.5 pr-3 text-slate-600">{fmtTime(c.check_out_time)}</td>
+            <td className="py-2.5">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 uppercase">
+                {c.method || 'manual'}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
@@ -149,10 +429,12 @@ function StaffForm({ staff, onClose }) {
     salary: staff?.salary || '',
     department: staff?.department || '',
     stage: staff?.stage || 'Junior',
-    status: staff?.status || 'Active'
+    status: staff?.status || 'Active',
+    email: staff?.email || ''
   })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
+  const [account, setAccount] = useState(null)
 
   const validateField = (field, value) => {
     const error = getValidationError(field, value)
@@ -191,16 +473,29 @@ function StaffForm({ staff, onClose }) {
     try {
       if (staff) {
         await api.put(`/api/staff/${staff.id}`, formData)
+        toast.success('Staff member updated successfully')
+        onClose()
       } else {
-        await api.post('/api/staff', formData)
+        const created = await api.post('/api/staff', formData)
+        toast.success('Staff member added successfully')
+        if (created?.account?.tempPassword) {
+          setAccount(created.account)
+          return
+        }
+        if (created?.account?.error) {
+          toast.error(`Staff saved but app login failed: ${created.account.error}`)
+        }
+        onClose()
       }
-      toast.success(staff ? 'Staff member updated successfully' : 'Staff member added successfully')
-      onClose()
     } catch (err) {
       toast.error(err.message)
     } finally {
       setSaving(false)
     }
+  }
+
+  if (account) {
+    return <TeacherPasswordDialog account={account} onDone={onClose} />
   }
 
   return (
@@ -237,6 +532,17 @@ function StaffForm({ staff, onClose }) {
               />
               {errors.age && <span style={styles.errorText}>{errors.age}</span>}
             </div>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label>Email {staff ? '' : '(creates teacher app login)'}</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={e => setFormData({...formData, email: e.target.value})}
+              placeholder="teacher@school.com"
+              style={styles.input}
+            />
           </div>
 
           <div style={styles.formRow}>
@@ -354,7 +660,64 @@ function StaffForm({ staff, onClose }) {
   )
 }
 
+function TeacherPasswordDialog({ account, onDone }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(account.tempPassword)
+      setCopied(true)
+    } catch {
+      /* select-all fallback below */
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
+          <i className="fas fa-key" />
+        </div>
+        <h2 className="text-[16px] font-bold text-slate-800">Teacher app login created</h2>
+        <p className="mt-1 text-[12.5px] text-slate-500">
+          Give these to the teacher. This password is shown <b>only once</b> —
+          they will set their own on first login in the HRNAL app.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+            <p className="select-all text-[13.5px] font-semibold text-slate-700">{account.email}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Temporary password</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="select-all font-mono text-[16px] font-bold tracking-wide text-slate-800">
+                {account.tempPassword}
+              </p>
+              <button
+                onClick={copy}
+                className="rounded-lg bg-brand px-3 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-brand-dark"
+              >
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onDone}
+          className="mt-5 w-full rounded-xl border border-slate-200 py-2.5 text-[13px] font-semibold text-slate-600 transition hover:bg-slate-50"
+        >
+          Done — I saved the password
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const styles = {
+
   container: {
     padding: '20px',
     maxWidth: '1400px',
@@ -430,6 +793,16 @@ const styles = {
     fontSize: '12px',
     color: 'white',
     fontWeight: '500'
+  },
+  monitorBtn: {
+    padding: '6px 12px',
+    backgroundColor: '#0d9488',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    marginRight: '8px'
   },
   editBtn: {
     padding: '6px 12px',
