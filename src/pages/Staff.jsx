@@ -117,24 +117,29 @@ export default function Staff() {
                     </span>
                   </td>
                   <td>
-                    <button
-                      onClick={() => setMonitorStaff(member)}
-                      style={styles.monitorBtn}
-                    >
-                      📚 Lessons
-                    </button>
-                    <button
-                      onClick={() => handleEdit(member)}
-                      style={styles.editBtn}
-                    >
-                      ✏️ Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(member.id)}
-                      style={styles.deleteBtn}
-                    >
-                      🗑️ Delete
-                    </button>
+                    <div style={styles.actionsRow}>
+                      <button
+                        onClick={() => setMonitorStaff(member)}
+                        style={styles.monitorBtn}
+                        title="Lessons, leave & check-ins"
+                      >
+                        <i className="fas fa-book-open" /> Lessons
+                      </button>
+                      <button
+                        onClick={() => handleEdit(member)}
+                        style={styles.editBtn}
+                        title="Edit"
+                      >
+                        <i className="fas fa-pen" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(member.id)}
+                        style={styles.deleteBtn}
+                        title="Delete"
+                      >
+                        <i className="fas fa-trash" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -950,32 +955,50 @@ const styles = {
     color: 'white',
     fontWeight: '500'
   },
+  actionsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'nowrap',
+    whiteSpace: 'nowrap'
+  },
   monitorBtn: {
-    padding: '6px 12px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '7px 12px',
     backgroundColor: '#0d9488',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '12px',
-    marginRight: '8px'
+    fontWeight: 600,
+    whiteSpace: 'nowrap'
   },
   editBtn: {
-    padding: '6px 12px',
-    backgroundColor: '#3066b4',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
+    width: '32px',
+    height: '32px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff4fb',
+    color: '#3066b4',
+    border: '1px solid #d7e3f4',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontSize: '12px',
-    marginRight: '8px'
+    fontSize: '12px'
   },
   deleteBtn: {
-    padding: '6px 12px',
-    backgroundColor: '#ef4444',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
+    width: '32px',
+    height: '32px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fdf1f1',
+    color: '#ef4444',
+    border: '1px solid #f6d9d9',
+    borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '12px'
   },
