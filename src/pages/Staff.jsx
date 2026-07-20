@@ -191,6 +191,7 @@ function StaffMonitorDialog({ member, onClose }) {
             <div className="flex gap-1 px-6 pt-3">
               {[
                 { key: 'lessons', label: 'Lessons', icon: 'fa-book-open' },
+                { key: 'leave', label: 'Leave', icon: 'fa-umbrella-beach' },
                 { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
               ].map((t) => (
                 <button
@@ -207,6 +208,7 @@ function StaffMonitorDialog({ member, onClose }) {
             </div>
             <div className="min-h-[280px] flex-1 overflow-y-auto border-t border-slate-100 px-6 py-4">
               {tab === 'lessons' && <TeacherLessonsTab userId={userId} teacherName={member.name} />}
+              {tab === 'leave' && <TeacherLeaveTab userId={userId} teacherName={member.name} />}
               {tab === 'checkins' && <TeacherCheckinsTab userId={userId} />}
             </div>
           </>
@@ -366,6 +368,160 @@ function TeacherLessonsTab({ userId, teacherName }) {
               </div>
               <button
                 onClick={() => removeLesson(l.id)}
+                className="shrink-0 rounded-lg px-2 py-1 text-[12px] text-red-500 transition hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TeacherLeaveTab({ userId, teacherName }) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ type: 'casual', days: '1', start_date: '', note: '' })
+  const [saving, setSaving] = useState(false)
+
+  const reload = async () => {
+    try {
+      setError('')
+      setData(await api.get(`/api/leave/user/${userId}`))
+    } catch (err) {
+      setError(err.message)
+      setData({ records: [] })
+    }
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  const record = async (e) => {
+    e.preventDefault()
+    if (!form.start_date) return
+    setSaving(true)
+    try {
+      await api.post('/api/leave', {
+        user_id: userId,
+        type: form.type,
+        days: parseInt(form.days, 10) || 1,
+        start_date: form.start_date,
+        note: form.note.trim(),
+      })
+      toast.success(`Leave recorded for ${teacherName}`)
+      setShowForm(false)
+      setForm({ type: 'casual', days: '1', start_date: '', note: '' })
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeRecord = async (id) => {
+    if (!confirm('Remove this leave record?')) return
+    try {
+      await api.del(`/api/leave/${id}`)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  return (
+    <div>
+      {data?.casual && (
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          {[['Casual', data.casual, 'text-brand'], ['Sick', data.sick, 'text-violet-600']].map(([label, b, cls]) => (
+            <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <p className="text-[11.5px] font-bold uppercase tracking-wide text-slate-400">{label} leave</p>
+              <p className={`text-[20px] font-extrabold ${cls}`}>
+                {b.left} <span className="text-[12px] font-semibold text-slate-400">/ {b.total} days left</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-brand-dark"
+        >
+          {showForm ? 'Cancel' : '\u2795 Record Leave'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={record} className="mb-4 space-y-2.5 rounded-xl border border-brand/30 bg-brand-soft/40 p-4">
+          <div className="grid grid-cols-3 gap-2.5">
+            <select
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            >
+              <option value="casual">Casual</option>
+              <option value="sick">Sick</option>
+            </select>
+            <input
+              type="number"
+              min="1"
+              max="60"
+              value={form.days}
+              onChange={(e) => setForm({ ...form, days: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+              placeholder="Days"
+            />
+            <input
+              type="date"
+              value={form.start_date}
+              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              required
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+          </div>
+          <input
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            placeholder="Note (optional)"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+          >
+            {saving ? 'Saving\u2026' : 'Record'}
+          </button>
+        </form>
+      )}
+
+      {error && <p className="py-4 text-center text-[12.5px] text-red-500">{error}</p>}
+      {data?.records?.length === 0 && !error && (
+        <p className="py-6 text-center text-[13px] text-slate-400">No leave recorded this year.</p>
+      )}
+      {data?.records?.length > 0 && (
+        <div className="space-y-2">
+          {data.records.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+              <div>
+                <p className="text-[13px] font-semibold text-slate-700">
+                  {r.days} day{r.days > 1 ? 's' : ''} {r.type}
+                  <span className="ml-2 text-[11.5px] font-normal text-slate-400">
+                    from {new Date(r.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </span>
+                </p>
+                {r.note && <p className="text-[12px] text-slate-500">{r.note}</p>}
+              </div>
+              <button
+                onClick={() => removeRecord(r.id)}
                 className="shrink-0 rounded-lg px-2 py-1 text-[12px] text-red-500 transition hover:bg-red-50"
               >
                 Remove

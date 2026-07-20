@@ -4,7 +4,10 @@
 export const navGroups = [
   {
     title: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true }],
+    items: [
+      { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
+      { to: '/today', label: "Today's Board", short: 'Today', icon: 'fa-calendar-day' },
+    ],
   },
   {
     title: 'Management',
@@ -22,11 +25,19 @@ export const navGroups = [
       { to: '/biometry', label: 'Staff Attendance', short: 'Biometry', icon: 'fa-fingerprint' },
       { to: '/tasks', label: 'Daily Tasks', short: 'Tasks', icon: 'fa-clipboard-check' },
       { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
+      { to: '/daily-reports', label: 'Daily Reports', short: 'Reports Feed', icon: 'fa-file-lines' },
     ],
   },
   {
     title: 'Engagement',
-    items: [{ to: '/feedback', label: 'Feedback', short: 'Feedback', icon: 'fa-comments' }],
+    items: [
+      { to: '/announcements', label: 'Announcements', short: 'Announce', icon: 'fa-bullhorn' },
+      { to: '/feedback', label: 'Feedback', short: 'Feedback', icon: 'fa-comments' },
+    ],
+  },
+  {
+    title: 'System',
+    items: [{ to: '/settings', label: 'Settings', short: 'Settings', icon: 'fa-gear' }],
   },
 ]
 

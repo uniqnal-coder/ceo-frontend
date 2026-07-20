@@ -27,8 +27,8 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
             <i className="fas fa-school" />
           </span>
           <div className={`leading-none ${collapsed ? 'lg:hidden' : ''}`}>
-            <h1 className="text-[16px] font-extrabold leading-tight tracking-tight text-brand-light">SCHOOL AUTO</h1>
-            <p className="text-[16px] font-extrabold leading-tight tracking-tight text-white">CEO</p>
+            <h1 className="text-[16px] font-extrabold leading-tight tracking-tight text-brand-light">HRNAL</h1>
+            <p className="text-[16px] font-extrabold leading-tight tracking-tight text-white">SchoolOS</p>
           </div>
           <button
             onClick={onCloseMobile}
