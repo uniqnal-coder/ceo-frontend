@@ -386,11 +386,24 @@ function StudentTasksTab({ userId, studentName }) {
 
 function StudentCheckinsTab({ userId }) {
   const { rows, error } = useFetchList(`/api/checkins/user/${userId}`)
-  const status = <TabStatus rows={rows} error={error} emptyText="No check-ins recorded yet." />
-  if (rows === null || error || rows?.length === 0) return status
+
+  if (error) return <p className="py-8 text-center text-[13px] text-red-500">{error}</p>
+  if (rows === null) return <p className="py-8 text-center text-[13px] text-slate-400">Loading…</p>
+  if (rows.length === 0)
+    return <p className="py-8 text-center text-[13px] text-slate-400">No check-ins recorded yet.</p>
 
   const fmtTime = (iso) =>
     iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'
+
+  const viewSelfie = async (c) => {
+    try {
+      const r = await api.get(`/api/checkins/selfie/${userId}?date=${c.date}`)
+      if (r.url) window.open(r.url, '_blank')
+      else toast.error('No selfie stored for this day')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
 
   return (
     <table className="w-full text-left text-[12.5px]">
@@ -399,7 +412,8 @@ function StudentCheckinsTab({ userId }) {
           <th className="py-2 pr-3">Date</th>
           <th className="py-2 pr-3">Check-in</th>
           <th className="py-2 pr-3">Check-out</th>
-          <th className="py-2">Method</th>
+          <th className="py-2 pr-3">Location</th>
+          <th className="py-2">Selfie</th>
         </tr>
       </thead>
       <tbody>
@@ -410,10 +424,31 @@ function StudentCheckinsTab({ userId }) {
             </td>
             <td className="py-2.5 pr-3 text-emerald-600">{fmtTime(c.check_in_time)}</td>
             <td className="py-2.5 pr-3 text-slate-600">{fmtTime(c.check_out_time)}</td>
+            <td className="py-2.5 pr-3">
+              {c.latitude != null ? (
+                <a
+                  href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-600 hover:bg-sky-100"
+                >
+                  <i className="fas fa-location-dot" /> Map
+                </a>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
+            </td>
             <td className="py-2.5">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 uppercase">
-                {c.method || 'manual'}
-              </span>
+              {c.selfie_verified ? (
+                <button
+                  onClick={() => viewSelfie(c)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-600 hover:bg-violet-100"
+                >
+                  <i className="fas fa-user-check" /> View
+                </button>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
             </td>
           </tr>
         ))}
@@ -421,7 +456,6 @@ function StudentCheckinsTab({ userId }) {
     </table>
   )
 }
-
 function StudentForm({ student, onClose }) {
   const [formData, setFormData] = useState({
     name: student?.name || '',

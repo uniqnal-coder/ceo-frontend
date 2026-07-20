@@ -10,6 +10,7 @@ export default function TodayBoard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [selfie, setSelfie] = useState(null) // {name, url|null, loading}
 
   useEffect(() => {
     let live = true
@@ -51,6 +52,16 @@ export default function TodayBoard() {
     }),
     [rows]
   )
+
+  const openSelfie = async (row) => {
+    setSelfie({ name: row.name, url: null, loading: true })
+    try {
+      const r = await api.get(`/api/checkins/selfie/${row.id}?date=${date}`)
+      setSelfie({ name: row.name, url: r.url, loading: false })
+    } catch {
+      setSelfie({ name: row.name, url: null, loading: false })
+    }
+  }
 
   const fmt = (iso) =>
     iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'
@@ -125,6 +136,8 @@ export default function TodayBoard() {
                 <th className="px-2 py-2.5">Role</th>
                 <th className="px-2 py-2.5">Check-in</th>
                 <th className="px-2 py-2.5">Check-out</th>
+                <th className="px-2 py-2.5">Location</th>
+                <th className="px-2 py-2.5">Selfie</th>
                 <th className="px-4 py-2.5 text-right">Status</th>
               </tr>
             </thead>
@@ -145,6 +158,33 @@ export default function TodayBoard() {
                   </td>
                   <td className="px-2 py-2.5 text-emerald-600">{fmt(r.punch?.check_in_time)}</td>
                   <td className="px-2 py-2.5 text-slate-500">{fmt(r.punch?.check_out_time)}</td>
+                  <td className="px-2 py-2.5">
+                    {r.punch?.latitude != null ? (
+                      <a
+                        href={`https://maps.google.com/?q=${r.punch.latitude},${r.punch.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[11.5px] font-semibold text-sky-600 hover:bg-sky-100"
+                        title={`${r.punch.latitude}, ${r.punch.longitude}`}
+                      >
+                        <i className="fas fa-location-dot" /> Map
+                      </a>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2.5">
+                    {r.punch?.selfie_verified ? (
+                      <button
+                        onClick={() => openSelfie(r)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-violet-50 px-2 py-1 text-[11.5px] font-semibold text-violet-600 hover:bg-violet-100"
+                      >
+                        <i className="fas fa-user-check" /> View
+                      </button>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-right">
                     <span
                       className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
@@ -162,6 +202,43 @@ export default function TodayBoard() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {selfie && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setSelfie(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[14px] font-bold text-slate-800">
+                🤳 {selfie.name} — {date}
+              </p>
+              <button
+                onClick={() => setSelfie(null)}
+                className="rounded-lg px-2 py-0.5 text-[18px] leading-none text-slate-400 hover:bg-slate-100"
+              >
+                ×
+              </button>
+            </div>
+            {selfie.loading ? (
+              <p className="py-10 text-center text-[13px] text-slate-400">Loading…</p>
+            ) : selfie.url ? (
+              <img
+                src={selfie.url}
+                alt="Check-in selfie"
+                className="w-full rounded-xl border border-slate-200"
+              />
+            ) : (
+              <p className="py-10 text-center text-[13px] text-slate-400">
+                No selfie stored for this day.
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
