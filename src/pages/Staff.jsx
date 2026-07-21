@@ -10,6 +10,7 @@ export default function Staff() {
   const [showForm, setShowForm] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const [monitorStaff, setMonitorStaff] = useState(null)
+  const [roleFilter, setRoleFilter] = useState('all')
 
   useEffect(() => {
     fetchStaff()
@@ -56,6 +57,14 @@ export default function Staff() {
     return <StaffForm staff={editingStaff} onClose={handleFormClose} />
   }
 
+  const appRoleOf = (m) => m.users?.role || null
+  const visibleStaff = staff.filter((m) => {
+    if (roleFilter === 'all') return true
+    if (roleFilter === 'teacher') return appRoleOf(m) === 'teacher'
+    if (roleFilter === 'staff') return appRoleOf(m) === 'staff'
+    return !appRoleOf(m) // no login
+  })
+
   return (
     <div style={styles.container}>
       <div style={styles.header} className="page-header">
@@ -68,10 +77,31 @@ export default function Staff() {
         </button>
       </div>
 
+      <div className="mb-4 flex gap-2 px-1">
+        {[
+          ['all', 'Everyone'],
+          ['teacher', '👩‍🏫 Teachers'],
+          ['staff', '🧑‍💼 Staff'],
+          ['none', 'No app login'],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setRoleFilter(key)}
+            className={`rounded-full border px-4 py-1.5 text-[12.5px] font-semibold transition ${
+              roleFilter === key
+                ? 'border-brand bg-brand text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading && <p style={styles.loading}>Loading staff...</p>}
       {error && <p style={styles.error}>❌ {error}</p>}
 
-      {!loading && staff.length === 0 && !error && (
+      {!loading && visibleStaff.length === 0 && !error && (
         <div style={styles.empty} className="empty-state">
           <p>📋 No staff members found</p>
           <button onClick={() => setShowForm(true)} style={styles.emptyButton}>
@@ -80,7 +110,7 @@ export default function Staff() {
         </div>
       )}
 
-      {!loading && staff.length > 0 && (
+      {!loading && visibleStaff.length > 0 && (
         <div style={styles.tableContainer} className="data-table-container">
           <table style={styles.table} className="data-table">
             <thead>
@@ -92,12 +122,13 @@ export default function Staff() {
                 <th>Salary</th>
                 <th>Phone</th>
                 <th>Certificate</th>
+                <th>App</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {staff.map(member => (
+              {visibleStaff.map(member => (
                 <tr key={member.id}>
                   <td style={styles.nameCell}>{member.name}</td>
                   <td>{member.age || '-'}</td>
@@ -108,6 +139,15 @@ export default function Staff() {
                   </td>
                   <td>{member.phone || '-'}</td>
                   <td>{member.certificate || '-'}</td>
+                  <td>
+                    {appRoleOf(member) === 'teacher' ? (
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher app</span>
+                    ) : appRoleOf(member) === 'staff' ? (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-600">Staff app</span>
+                    ) : (
+                      <span className="text-[11px] text-slate-300">—</span>
+                    )}
+                  </td>
                   <td>
                     <span style={{
                       ...styles.badge,
@@ -161,15 +201,31 @@ export default function Staff() {
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function StaffMonitorDialog({ member, onClose }) {
-  const [tab, setTab] = useState('tasks')
+  const appRole = member.users?.role === 'staff' ? 'staff' : 'teacher'
+  const [tab, setTab] = useState(appRole === 'staff' ? 'tasks' : 'lessons')
   const userId = member.user_id
+
+  const tabs =
+    appRole === 'staff'
+      ? [
+          { key: 'tasks', label: 'Tasks', icon: 'fa-list-check' },
+          { key: 'leave', label: 'Leave', icon: 'fa-umbrella-beach' },
+          { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
+        ]
+      : [
+          { key: 'lessons', label: 'Lessons', icon: 'fa-book-open' },
+          { key: 'leave', label: 'Leave', icon: 'fa-umbrella-beach' },
+          { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
+        ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-xl">
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-[16px] font-bold text-slate-800">👩‍🏫 {member.name}</h2>
+            <h2 className="text-[16px] font-bold text-slate-800">
+              {appRole === 'staff' ? '🧑‍💼' : '👩‍🏫'} {member.name}
+            </h2>
             <p className="text-[12px] text-slate-500">
               {member.role || 'Teacher'} · {member.department || '—'}
             </p>
@@ -194,12 +250,7 @@ function StaffMonitorDialog({ member, onClose }) {
         ) : (
           <>
             <div className="flex gap-1 px-6 pt-3">
-              {[
-                { key: 'tasks', label: 'Tasks', icon: 'fa-list-check' },
-                { key: 'lessons', label: 'Lessons', icon: 'fa-book-open' },
-                { key: 'leave', label: 'Leave', icon: 'fa-umbrella-beach' },
-                { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
-              ].map((t) => (
+              {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
