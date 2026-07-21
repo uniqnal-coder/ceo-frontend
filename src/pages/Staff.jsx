@@ -195,6 +195,7 @@ function StaffMonitorDialog({ member, onClose }) {
           <>
             <div className="flex gap-1 px-6 pt-3">
               {[
+                { key: 'tasks', label: 'Tasks', icon: 'fa-list-check' },
                 { key: 'lessons', label: 'Lessons', icon: 'fa-book-open' },
                 { key: 'leave', label: 'Leave', icon: 'fa-umbrella-beach' },
                 { key: 'checkins', label: 'Check-ins', icon: 'fa-location-dot' },
@@ -212,6 +213,7 @@ function StaffMonitorDialog({ member, onClose }) {
               ))}
             </div>
             <div className="min-h-[280px] flex-1 overflow-y-auto border-t border-slate-100 px-6 py-4">
+              {tab === 'tasks' && <StaffTasksTab userId={userId} staffName={member.name} />}
               {tab === 'lessons' && <TeacherLessonsTab userId={userId} teacherName={member.name} />}
               {tab === 'leave' && <TeacherLeaveTab userId={userId} teacherName={member.name} />}
               {tab === 'checkins' && <TeacherCheckinsTab userId={userId} />}
@@ -243,6 +245,234 @@ function useFetchList(path) {
   }, [path])
 
   return { rows, error, reload }
+}
+
+function StaffTasksTab({ userId, staffName }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({
+    title: '', department: '', priority: 'normal', due_at: '', subtasks: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const reload = async () => {
+    try {
+      setError('')
+      setRows(toArray(await api.get(`/api/staff-tasks/user/${userId}`)))
+    } catch (err) {
+      setError(err.message)
+      setRows([])
+    }
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  const assign = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return
+    setSaving(true)
+    try {
+      await api.post('/api/staff-tasks', {
+        user_id: userId,
+        title: form.title.trim(),
+        department: form.department.trim(),
+        priority: form.priority,
+        due_at: form.due_at ? new Date(form.due_at).toISOString() : null,
+        subtasks: form.subtasks.split('\n').map((s) => s.trim()).filter(Boolean),
+      })
+      toast.success(`Task assigned to ${staffName}`)
+      setForm({ title: '', department: '', priority: 'normal', due_at: '', subtasks: '' })
+      setShowForm(false)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeTask = async (id) => {
+    if (!confirm('Remove this task?')) return
+    try {
+      await api.del(`/api/staff-tasks/${id}`)
+      reload()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const viewPhoto = async (reportId) => {
+    try {
+      const r = await api.get(`/api/staff-tasks/report-photo/${reportId}`)
+      if (r.url) window.open(r.url, '_blank')
+      else toast.error('No photo on this report')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const progressOf = (t) => {
+    if (t.status === 'completed') return 1
+    const subs = t.subtasks || []
+    if (!subs.length) return 0
+    return subs.filter((s) => s.status === 'completed').length / subs.length
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex justify-end">
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="rounded-lg bg-brand px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-brand-dark"
+        >
+          {showForm ? 'Cancel' : '➕ Assign Task'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={assign} className="mb-4 space-y-2.5 rounded-xl border border-brand/30 bg-brand-soft/40 p-4">
+          <input
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Task title *"
+            required
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+          />
+          <div className="grid grid-cols-3 gap-2.5">
+            <input
+              value={form.department}
+              onChange={(e) => setForm({ ...form, department: e.target.value })}
+              placeholder="Area (e.g. Supervisor/Retail)"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+            <select
+              value={form.priority}
+              onChange={(e) => setForm({ ...form, priority: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            >
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+              <option value="low">Low</option>
+            </select>
+            <input
+              type="datetime-local"
+              value={form.due_at}
+              onChange={(e) => setForm({ ...form, due_at: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+            />
+          </div>
+          <textarea
+            value={form.subtasks}
+            onChange={(e) => setForm({ ...form, subtasks: e.target.value })}
+            placeholder={'Sub-tasks — one per line\nCheck lights/power\nInspect displays'}
+            rows={3}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:border-brand"
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
+          >
+            {saving ? 'Assigning…' : 'Assign'}
+          </button>
+        </form>
+      )}
+
+      {error && <p className="py-6 text-center text-[12.5px] text-red-500">{error}</p>}
+      {rows === null && !error && <p className="py-6 text-center text-[12.5px] text-slate-400">Loading…</p>}
+      {rows?.length === 0 && !error && (
+        <p className="py-6 text-center text-[13px] text-slate-400">No tasks assigned yet.</p>
+      )}
+      <div className="space-y-3">
+        {rows?.map((t) => (
+          <div key={t.id} className="rounded-xl border border-slate-200 p-3.5">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-[13.5px] font-bold text-slate-700">{t.title}</p>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase ${
+                    t.priority === 'high'
+                      ? 'bg-red-50 text-red-500'
+                      : 'bg-sky-50 text-sky-600'
+                  }`}
+                >
+                  {t.priority}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
+                    t.status === 'completed'
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {t.status === 'completed' ? '✓ Completed' : `${Math.round(progressOf(t) * 100)}%`}
+                </span>
+                <button
+                  onClick={() => removeTask(t.id)}
+                  className="rounded px-1.5 text-[12px] text-red-400 hover:bg-red-50"
+                  title="Remove"
+                >
+                  <i className="fas fa-trash" />
+                </button>
+              </div>
+            </div>
+            {t.department && (
+              <p className="text-[11.5px] text-slate-400">{t.department}</p>
+            )}
+            {(t.subtasks || []).length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {t.subtasks.map((sTask) => (
+                  <li key={sTask.id} className="flex items-center gap-2 text-[12px] text-slate-600">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        sTask.status === 'completed'
+                          ? 'bg-emerald-500'
+                          : sTask.status === 'pending'
+                            ? 'bg-amber-400'
+                            : 'bg-slate-300'
+                      }`}
+                    />
+                    <span className={sTask.status === 'completed' ? 'line-through text-slate-400' : ''}>
+                      {sTask.title}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(t.reports || []).length > 0 && (
+              <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                {t.reports.map((r) => (
+                  <div key={r.id} className="flex items-start gap-2 text-[12px] text-slate-600">
+                    <i className={`fas ${r.done ? 'fa-circle-check text-emerald-500' : 'fa-message'} mt-0.5`} />
+                    <span className="flex-1">
+                      {r.note || (r.done ? 'Marked done' : 'Progress update')}
+                      <span className="ml-1 text-[10.5px] text-slate-400">
+                        {new Date(r.created_at).toLocaleString('en-GB', {
+                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    </span>
+                    {r.photo_path && (
+                      <button
+                        onClick={() => viewPhoto(r.id)}
+                        className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-600 hover:bg-violet-100"
+                      >
+                        📷 Photo
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function TeacherLessonsTab({ userId, teacherName }) {
@@ -622,7 +852,8 @@ function StaffForm({ staff, onClose }) {
     department: staff?.department || '',
     stage: staff?.stage || 'Junior',
     status: staff?.status || 'Active',
-    email: staff?.email || ''
+    email: staff?.email || '',
+    app_role: 'teacher'
   })
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
@@ -726,15 +957,28 @@ function StaffForm({ staff, onClose }) {
             </div>
           </div>
 
-          <div style={styles.formGroup}>
-            <label>Email {staff ? '' : '(creates teacher app login)'}</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={e => setFormData({...formData, email: e.target.value})}
-              placeholder="teacher@school.com"
-              style={styles.input}
-            />
+          <div style={styles.formRow}>
+            <div style={styles.formGroup}>
+              <label>Email {staff ? '' : '(creates app login)'}</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={e => setFormData({...formData, email: e.target.value})}
+                placeholder="person@school.com"
+                style={styles.input}
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label>App type</label>
+              <select
+                value={formData.app_role}
+                onChange={e => setFormData({...formData, app_role: e.target.value})}
+                style={styles.input}
+              >
+                <option value="teacher">Teacher app (lessons, attendance)</option>
+                <option value="staff">Staff app (tasks, reports)</option>
+              </select>
+            </div>
           </div>
 
           <div style={styles.formRow}>
