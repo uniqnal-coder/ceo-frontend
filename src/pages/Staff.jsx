@@ -121,9 +121,9 @@ export default function Staff() {
                       <button
                         onClick={() => setMonitorStaff(member)}
                         style={styles.monitorBtn}
-                        title="Lessons, leave & check-ins"
+                        title="Tasks, lessons, leave & check-ins"
                       >
-                        <i className="fas fa-book-open" /> Lessons
+                        <i className="fas fa-briefcase" /> Manage
                       </button>
                       <button
                         onClick={() => handleEdit(member)}
@@ -161,7 +161,7 @@ export default function Staff() {
 const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function StaffMonitorDialog({ member, onClose }) {
-  const [tab, setTab] = useState('lessons')
+  const [tab, setTab] = useState('tasks')
   const userId = member.user_id
 
   return (
@@ -186,9 +186,9 @@ function StaffMonitorDialog({ member, onClose }) {
           <div className="px-6 py-10 text-center">
             <p className="text-[14px] font-semibold text-slate-700">No app login yet</p>
             <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-slate-500">
-              Edit this staff member and add an <b>email</b> — saving creates a
-              teacher app login with a one-time temporary password, and lessons
-              can then be assigned here.
+              Edit this staff member and add an <b>email</b> — saving creates an
+              app login (Teacher or Staff type) with a one-time temporary
+              password, and tasks or lessons can then be assigned here.
             </p>
           </div>
         ) : (
