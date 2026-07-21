@@ -77,7 +77,7 @@ export default function Staff() {
         </button>
       </div>
 
-      <div className="mb-4 flex gap-2 px-1">
+      <div className="mb-4 flex flex-wrap gap-2 px-1">
         {[
           ['all', 'Everyone'],
           ['teacher', '👩‍🏫 Teachers'],
@@ -141,9 +141,9 @@ export default function Staff() {
                   <td>{member.certificate || '-'}</td>
                   <td>
                     {appRoleOf(member) === 'teacher' ? (
-                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher app</span>
+                      <span className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher app</span>
                     ) : appRoleOf(member) === 'staff' ? (
-                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-600">Staff app</span>
+                      <span className="whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-600">Staff app</span>
                     ) : (
                       <span className="text-[11px] text-slate-300">—</span>
                     )}
