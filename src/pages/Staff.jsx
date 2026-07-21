@@ -512,7 +512,7 @@ function StaffTasksTab({ userId, staffName }) {
                         onClick={() => viewPhoto(r.id)}
                         className="rounded bg-violet-50 px-1.5 py-0.5 text-[10.5px] font-bold text-violet-600 hover:bg-violet-100"
                       >
-                        📷 Photo
+                        📎 File
                       </button>
                     )}
                   </div>
