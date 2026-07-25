@@ -26,7 +26,7 @@ const chipClass = (map, value) => map[String(value || '').toLowerCase()] || 'bg-
 // Ready-made daily-duty templates from the SchoolOS reference sheet — quick
 // bulk assignment without retyping recurring duties.
 const TASK_TEMPLATES = [
-  { title: 'Monitor Students & Visitor Entry', description: 'Monitor all students, visitors and staff entry/exit points.', category: 'Security', freq: 'Daily' },
+  { title: 'Monitor Visitor & Staff Entry', description: 'Monitor all visitors and staff entry/exit points.', category: 'Security', freq: 'Daily' },
   { title: 'Visit Selected Areas', description: 'Make rounds in all selected areas of the school.', category: 'Security', freq: 'Daily' },
   { title: "Don't Allow Unregistered People", description: 'Prevent entry of unregistered or unknown persons.', category: 'Security', freq: 'Daily' },
   { title: 'Data Entry - Daily Report', description: 'Enter daily activities and incident reports.', category: 'Admin', freq: 'Daily' },

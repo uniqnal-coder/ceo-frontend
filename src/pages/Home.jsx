@@ -3,11 +3,8 @@ import { Link } from 'react-router-dom'
 import {
   fetchDashboard,
   markAllNotificationsRead,
-  attendanceCounts,
-  attendanceTrend,
+  checkinCounts,
   taskCounts,
-  financeSummary,
-  feeTrend,
   rewardsAndFaults,
   timeAgo,
 } from '../api/dashboard'
@@ -62,11 +59,8 @@ export default function Home() {
   const derived = useMemo(() => {
     if (!data) return null
     return {
-      attendance: attendanceCounts(data.attendanceToday),
-      attTrend: attendanceTrend(data.attendanceAll, 7),
+      checkins: checkinCounts(data.checkinsToday),
       tasks: taskCounts(data.tasks),
-      finance: financeSummary(data.fees),
-      feeTrend: feeTrend(data.fees, 7),
       rf: rewardsAndFaults(data.salary),
     }
   }, [data])
@@ -83,9 +77,11 @@ export default function Home() {
 
   if (!data) return <DashboardSkeleton />
 
-  const att = derived.attendance
-  const todayTotal = data.attendanceToday.length
-  const presentPct = pctOf(att.present, todayTotal)
+  const ci = derived.checkins
+  const presentPct = pctOf(ci.present, ci.total)
+  const people = data.checkinsToday?.people || []
+  const teachersTotal = people.filter((p) => p.role === 'teacher').length
+  const staffAppTotal = people.filter((p) => p.role === 'staff').length
   const healthy = data.health?.status === 'healthy'
   const dbOnline = data.health?.database === 'connected'
   const recentTasks = data.tasks.slice(0, 5)
@@ -93,40 +89,43 @@ export default function Home() {
   const unread = notifs.filter((n) => !n.read).length
   const biometryTotal = data.biometryDenied ? null : data.biometry.length
   const biometryActive = data.biometryDenied ? null : data.biometry.filter((b) => b.is_active !== false).length
-  const classesRunning = new Set(data.attendanceToday.map((r) => r.lesson).filter(Boolean)).size
-  const todayCollection = derived.feeTrend[derived.feeTrend.length - 1]?.value || 0
   const uptimeH = Math.floor((data.health?.uptime || 0) / 3600)
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5 lg:p-6">
       {/* ---- KPI row ---- */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard color="bg-kpi-blue" icon="fa-user-graduate" label="Total Students" value={data.studentsTotal.toLocaleString()}
-          delta={{ text: 'Enrolled & active', up: true }} />
-        <KpiCard color="bg-kpi-sky" icon="fa-users" label="Total Staff" value={data.staffTotal.toLocaleString()}
+        <KpiCard color="bg-kpi-blue" icon="fa-users" label="Total Staff" value={data.staffTotal.toLocaleString()}
           delta={{ text: 'Across all departments', up: true }} />
-        <KpiCard color="bg-kpi-green" icon="fa-circle-check" label="Present Today" value={att.present.toLocaleString()}
-          delta={presentPct !== null ? { text: `${presentPct}% attendance`, up: true } : { text: 'No records yet', muted: true }} />
-        <KpiCard color="bg-kpi-gold" icon="fa-sack-dollar" label="Total Revenue" value={money(derived.finance.total)}
-          delta={{ text: `${money(derived.finance.thisMonth)} this month`, up: true }} />
+        <KpiCard color="bg-kpi-sky" icon="fa-chalkboard-user" label="Teachers (App)" value={teachersTotal.toLocaleString()}
+          delta={{ text: 'With mobile login', up: true }} />
+        <KpiCard color="bg-kpi-purple" icon="fa-user-tie" label="Staff (App)" value={staffAppTotal.toLocaleString()}
+          delta={{ text: 'With mobile login', up: true }} />
+        <KpiCard color="bg-kpi-green" icon="fa-circle-check" label="Present Today" value={ci.present.toLocaleString()}
+          delta={presentPct !== null ? { text: `${presentPct}% checked in`, up: true } : { text: 'No punches yet', muted: true }} />
       </div>
 
       {/* ---- Row 2: attendance · camera & biometry · notifications ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-5" icon="fa-chart-pie" iconColor="text-brand" title="Attendance Overview (Today)">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-4">
-              <Donut pct={presentPct} />
-              <ul className="space-y-2.5">
-                <LegendRow dot="bg-brand" label="Present" value={att.present} extra={pctOf(att.present, todayTotal)} />
-                <LegendRow dot="bg-danger" label="Absent" value={att.absent} extra={pctOf(att.absent, todayTotal)} />
-                <LegendRow dot="bg-amber-400" label="Late" value={att.late} extra={pctOf(att.late, todayTotal)} />
-              </ul>
+        <Card className="xl:col-span-5" icon="fa-chart-pie" iconColor="text-brand" title="Check-ins Today (Verified)"
+          action={<CardLink to="/today" label="Today's Board" />}>
+          <div className="flex items-center justify-center gap-6">
+            <Donut pct={presentPct} />
+            <ul className="space-y-2.5">
+              <LegendRow dot="bg-brand" label="In" value={ci.present} extra={pctOf(ci.present, ci.total)} />
+              <LegendRow dot="bg-danger" label="Not in" value={ci.notIn} extra={pctOf(ci.notIn, ci.total)} />
+              <LegendRow dot="bg-amber-400" label="Late" value={ci.late} extra={pctOf(ci.late, ci.total)} />
+            </ul>
+          </div>
+          <div className="mt-4 border-t border-slate-100 pt-3.5">
+            <div className="grid grid-cols-3 gap-1.5">
+              <MiniStat label="On shift now" value={Math.max(ci.present - ci.out, 0)} tone="text-kpi-blue" />
+              <MiniStat label="Checked out" value={ci.out} tone="text-slate-700" />
+              <MiniStat label="Selfie verified" value={ci.selfies} tone="text-brand" />
             </div>
-            <div className="min-w-0 flex-1 border-slate-100 sm:border-l sm:pl-5">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Weekly Trend</p>
-              <TrendLines series={derived.attTrend} />
-            </div>
+            <p className="mt-3 text-center text-[11px] text-slate-400">
+              Every punch is verified with GPS location + selfie from the HRNAL app.
+            </p>
           </div>
         </Card>
 
@@ -135,15 +134,15 @@ export default function Home() {
           icon="fa-video"
           iconColor="text-kpi-blue"
           title="Staff Attendance (Camera & Biometry)"
-          action={<CardLink to="/attendance" label="View All" />}
+          action={<CardLink to="/biometry" label="View All" />}
         >
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Today's Records</p>
               <div className="grid grid-cols-3 gap-1.5">
-                <MiniStat label="Present" value={att.present} tone="text-brand" />
-                <MiniStat label="Absent" value={att.absent} tone="text-danger" />
-                <MiniStat label="Late" value={att.late} tone="text-amber-500" />
+                <MiniStat label="Present" value={ci.present} tone="text-brand" />
+                <MiniStat label="Absent" value={ci.notIn} tone="text-danger" />
+                <MiniStat label="Late" value={ci.late} tone="text-amber-500" />
               </div>
             </div>
             <div>
@@ -262,12 +261,12 @@ export default function Home() {
           action={<CardLink to="/evaluations" label="View All Reports" />}
         >
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            <ReportTile to="/attendance" icon="fa-calendar-day" color="bg-blue-50 text-kpi-blue" title="Daily Report" />
+            <ReportTile to="/daily-reports" icon="fa-calendar-day" color="bg-blue-50 text-kpi-blue" title="Daily Report" />
             <ReportTile to="/tasks" icon="fa-calendar-week" color="bg-brand-soft text-brand" title="Weekly Report" />
             <ReportTile to="/evaluations" icon="fa-calendar" color="bg-violet-50 text-kpi-purple" title="Monthly Report" />
-            <ReportTile to="/attendance" icon="fa-user-check" color="bg-amber-50 text-kpi-gold" title="Attendance Report" />
+            <ReportTile to="/today" icon="fa-user-check" color="bg-amber-50 text-kpi-gold" title="Attendance Report" />
             <ReportTile to="/evaluations" icon="fa-chart-line" color="bg-pink-50 text-kpi-pink" title="Performance Report" />
-            <ReportTile to="/fees" icon="fa-coins" color="bg-emerald-50 text-success" title="Financial Report" />
+            <ReportTile to="/staff" icon="fa-umbrella-beach" color="bg-emerald-50 text-success" title="Leave Report" />
           </div>
         </Card>
 
@@ -289,9 +288,9 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* ---- Row 4: monitoring · finance · quick actions · system status ---- */}
+      {/* ---- Row 4: monitoring · quick actions · system status ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-4" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
+        <Card className="xl:col-span-5" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             <MonitorTile icon="fa-video" color="text-kpi-blue" label="Cameras Active" value="0/5" sub="Not connected" />
             <MonitorTile
@@ -300,37 +299,25 @@ export default function Home() {
               sub={biometryTotal === null ? 'Admin only' : biometryTotal ? 'Online' : 'None enrolled'}
               good={!!biometryActive}
             />
-            <MonitorTile icon="fa-school" color="text-brand" label="Classes Running" value={classesRunning || '—'} sub="From attendance" good={!!classesRunning} />
+            <MonitorTile icon="fa-user-check" color="text-brand" label="On Shift Now" value={Math.max(ci.present - ci.out, 0) || '—'} sub="Checked in, not out" good={ci.present - ci.out > 0} />
             <MonitorTile icon="fa-shield-halved" color="text-amber-500" label="Security Status" value={healthy ? 'Secure' : 'Check'} sub={healthy ? 'All systems OK' : 'Backend unhealthy'} good={healthy} bad={!healthy} />
             <MonitorTile icon="fa-heart-pulse" color="text-rose-500" label="System Health" value={healthy ? 'Excellent' : 'Degraded'} sub={healthy ? `${uptimeH}h uptime` : 'Unreachable'} good={healthy} bad={!healthy} />
             <MonitorTile icon="fa-database" color="text-teal-500" label="Database" value={dbOnline ? 'Online' : 'Down'} sub="Supabase" good={dbOnline} bad={!dbOnline} />
           </div>
         </Card>
 
-        <Card className="xl:col-span-4" icon="fa-sack-dollar" iconColor="text-brand" title="Finance Overview">
-          <div className="mb-4 grid grid-cols-3 gap-2.5">
-            <FinanceStat icon="fa-coins" color="text-brand" label="Today's Collection" value={money(todayCollection)} />
-            <FinanceStat icon="fa-calendar-check" color="text-kpi-blue" label="This Month" value={money(derived.finance.thisMonth)} />
-            <FinanceStat icon="fa-triangle-exclamation" color="text-danger" label="Unpaid Records" value={derived.finance.unpaidCount} />
-          </div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Fee Collection Trend</p>
-          <AreaChart points={derived.feeTrend} />
-        </Card>
-
-        <Card className="xl:col-span-2" icon="fa-bolt" iconColor="text-brand" title="Quick Actions">
-          <div className="grid grid-cols-2 gap-2">
-            <ActionTile to="/students" icon="fa-user-plus" label="Add Student" />
+        <Card className="xl:col-span-4" icon="fa-bolt" iconColor="text-brand" title="Quick Actions">
+          <div className="grid grid-cols-3 gap-2">
             <ActionTile to="/staff" icon="fa-user-tie" label="Add Staff" />
-            <ActionTile to="/attendance" icon="fa-clipboard-check" label="Mark Attendance" />
             <ActionTile to="/tasks" icon="fa-list-check" label="Assign Task" />
-            <ActionTile to="/fees" icon="fa-file-invoice-dollar" label="Add Fee" />
-            <ActionTile to="/evaluations" icon="fa-file-export" label="Generate Report" />
+            <ActionTile to="/today" icon="fa-calendar-day" label="Today's Board" />
+            <ActionTile to="/announcements" icon="fa-bullhorn" label="Announce" />
             <ActionTile to="/salary" icon="fa-award" label="Add Reward" />
             <ActionTile to="/salary" icon="fa-gavel" label="Add Fault" />
           </div>
         </Card>
 
-        <Card className="xl:col-span-2" icon="fa-server" iconColor="text-slate-500" title="System Status">
+        <Card className="xl:col-span-3" icon="fa-server" iconColor="text-slate-500" title="System Status">
           <ul className="space-y-2.5 text-[12px]">
             <StatusRow label="Database" ok={dbOnline} okText="Online" badText="Down" />
             <StatusRow label="Server" ok={healthy} okText="Online" badText="Unreachable" />
@@ -426,6 +413,7 @@ function LegendRow({ dot, label, value, extra }) {
   )
 }
 
+
 function MiniStat({ label, value, tone }) {
   return (
     <div className="rounded-lg bg-slate-50 px-1.5 py-2.5 text-center">
@@ -509,15 +497,6 @@ function MonitorTile({ icon, color, label, value, sub, good, bad }) {
   )
 }
 
-function FinanceStat({ icon, color, label, value }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-center">
-      <i className={`fas ${icon} ${color} text-xs`} />
-      <p className="mt-1 text-[15px] font-extrabold leading-6 text-slate-800">{value}</p>
-      <p className="truncate text-[10px] text-slate-400">{label}</p>
-    </div>
-  )
-}
 
 function ActionTile({ to, icon, label }) {
   return (
@@ -549,69 +528,7 @@ function StatusRow({ label, ok, okText, badText, neutral }) {
   )
 }
 
-// Present (green) vs absent (red) lines over the last week.
-function TrendLines({ series }) {
-  const width = 300
-  const height = 96
-  const pad = 8
-  const max = Math.max(...series.flatMap((p) => [p.present, p.absent]), 1)
-  const stepX = (width - pad * 2) / Math.max(series.length - 1, 1)
-  const toY = (v) => height - pad - (v / max) * (height - pad * 2)
-  const line = (key) => series.map((p, i) => `${pad + i * stepX},${toY(p[key])}`).join(' ')
 
-  if (!series.some((p) => p.present || p.absent)) {
-    return <p className="py-8 text-center text-[11px] text-slate-300">No attendance history yet</p>
-  }
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Weekly attendance trend">
-        <polyline points={line('present')} fill="none" stroke="#188a54" strokeWidth="2" strokeLinejoin="round" />
-        <polyline points={line('absent')} fill="none" stroke="#ef4444" strokeWidth="2" strokeLinejoin="round" />
-        {series.map((p, i) => (
-          <g key={i}>
-            <circle cx={pad + i * stepX} cy={toY(p.present)} r="2.5" fill="#188a54" />
-            <circle cx={pad + i * stepX} cy={toY(p.absent)} r="2.5" fill="#ef4444" />
-          </g>
-        ))}
-      </svg>
-      <div className="flex justify-between px-1 text-[9px] text-slate-400">
-        {series.map((p, i) => (
-          <span key={i}>{p.label}</span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Filled area chart for fee collection.
-function AreaChart({ points }) {
-  const width = 560
-  const height = 110
-  const pad = 8
-  const max = Math.max(...points.map((p) => p.value), 1)
-  const stepX = (width - pad * 2) / Math.max(points.length - 1, 1)
-  const coords = points.map((p, i) => [pad + i * stepX, height - pad - (p.value / max) * (height - pad * 2)])
-  const path = coords.map(([x, y]) => `${x},${y}`).join(' ')
-  const area = `${pad},${height - pad} ${path} ${width - pad},${height - pad}`
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Fee collection trend">
-        <polygon points={area} fill="rgb(48 102 180 / 0.10)" />
-        <polyline points={path} fill="none" stroke="#3066b4" strokeWidth="2" strokeLinejoin="round" />
-        {coords.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r="2.5" fill="#3066b4" />
-        ))}
-      </svg>
-      <div className="flex justify-between px-1 text-[10px] text-slate-400">
-        {points.map((p, i) => (
-          <span key={i}>{p.label}</span>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 function Empty({ text, cta }) {
   return (

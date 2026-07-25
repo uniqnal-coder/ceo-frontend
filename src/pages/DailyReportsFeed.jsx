@@ -25,7 +25,7 @@ export default function DailyReportsFeed() {
     if (!data) return []
     const submitted = new Set((data.reports || []).map((r) => r.user_id))
     return (data.people || [])
-      .filter((p) => p.role === 'student' && !submitted.has(p.id))
+      .filter((p) => !submitted.has(p.id))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [data])
 
@@ -94,7 +94,7 @@ export default function DailyReportsFeed() {
             </p>
             {missing.length === 0 ? (
               <p className="py-4 text-center text-[12.5px] text-emerald-600">
-                🎉 Every student reported!
+                🎉 Everyone reported!
               </p>
             ) : (
               <ul className="space-y-1.5">

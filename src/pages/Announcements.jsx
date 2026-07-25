@@ -4,8 +4,8 @@ import { api, toArray } from '../api/client'
 
 const AUDIENCES = [
   { key: 'all', label: 'Everyone', icon: 'fa-users' },
-  { key: 'students', label: 'Students', icon: 'fa-user-graduate' },
   { key: 'teachers', label: 'Teachers', icon: 'fa-person-chalkboard' },
+  { key: 'staff', label: 'Staff', icon: 'fa-user-tie' },
 ]
 
 const TYPES = [
@@ -82,7 +82,7 @@ export default function Announcements() {
       <div className="mb-5">
         <h2 className="text-[20px] font-extrabold text-slate-800">📣 Announcements</h2>
         <p className="text-[13px] text-slate-500">
-          Send a notification to the mobile apps — it appears instantly on students' and teachers' phones.
+          Send a notification to the mobile apps — it appears instantly on teachers' and staff phones.
         </p>
       </div>
 

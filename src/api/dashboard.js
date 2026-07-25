@@ -13,44 +13,33 @@ const settle = (result, fallback) => (result.status === 'fulfilled' ? result.val
 
 export async function fetchDashboard() {
   const [
-    students,
     staff,
     tasks,
-    attendanceToday,
-    attendanceAll,
+    checkins,
     notifications,
-    fees,
     salary,
     biometry,
     health,
   ] = await Promise.allSettled([
-    api.get('/api/students?page=1&limit=500'),
     api.get('/api/staff?page=1&limit=500'),
     api.get('/api/tasks?page=1&limit=200&sortBy=created_at&order=desc'),
-    api.get(`/api/attendance/date/${todayISO()}`),
-    api.get('/api/attendance?page=1&limit=1000&sortBy=date&order=desc'),
+    api.get(`/api/checkins/overview?date=${todayISO()}`),
     api.get('/api/notifications'),
-    api.get('/api/fees?page=1&limit=1000'),
     api.get('/api/salary?page=1&limit=200'),
     api.get('/api/biometry'),
     api.get('/health'),
   ])
 
-  const studentsRes = settle(students, null)
   const staffRes = settle(staff, null)
   const tasksRes = settle(tasks, null)
 
   return {
-    students: toArray(studentsRes ?? []),
-    studentsTotal: studentsRes?.pagination?.total ?? toArray(studentsRes ?? []).length,
     staff: toArray(staffRes ?? []),
     staffTotal: staffRes?.pagination?.total ?? toArray(staffRes ?? []).length,
     tasks: toArray(tasksRes ?? []),
     tasksTotal: tasksRes?.pagination?.total ?? toArray(tasksRes ?? []).length,
-    attendanceToday: toArray(settle(attendanceToday, [])),
-    attendanceAll: toArray(settle(attendanceAll, [])),
+    checkinsToday: settle(checkins, { checkins: [], people: [] }),
     notifications: toArray(settle(notifications, [])),
-    fees: toArray(settle(fees, [])),
     salary: toArray(settle(salary, null) ?? []),
     salaryDenied: salary.status === 'rejected',
     biometry: toArray(settle(biometry, null) ?? []),
@@ -69,38 +58,25 @@ export async function markAllNotificationsRead(notifications) {
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '')
 
-export function attendanceCounts(records) {
-  const counts = { present: 0, absent: 0, late: 0 }
-  for (const r of records) {
-    const s = norm(r.status)
-    if (s === 'present') counts.present += 1
-    else if (s === 'late') counts.late += 1
-    else counts.absent += 1
+// Verified punch stats for today from /api/checkins/overview.
+// Late = first punch after 08:30 (matches the mobile apps' rule).
+export function checkinCounts(overview) {
+  const checkins = overview?.checkins || []
+  const people = overview?.people || []
+  let present = 0
+  let out = 0
+  let late = 0
+  let selfies = 0
+  for (const c of checkins) {
+    if (!c.check_in_time) continue
+    present += 1
+    if (c.check_out_time) out += 1
+    if (c.selfie_verified) selfies += 1
+    const t = new Date(c.check_in_time)
+    if (t.getHours() > 8 || (t.getHours() === 8 && t.getMinutes() > 30)) late += 1
   }
-  return counts
-}
-
-// Present/absent per day for the last `days` days → [{ label, present, absent }]
-export function attendanceTrend(records, days = 7) {
-  const buckets = []
-  const index = new Map()
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    index.set(key, buckets.length)
-    buckets.push({ label: d.toLocaleDateString(undefined, { weekday: 'short' }), present: 0, absent: 0 })
-  }
-  for (const r of records) {
-    if (!r.date) continue
-    const key = String(r.date).slice(0, 10)
-    if (!index.has(key)) continue
-    const b = buckets[index.get(key)]
-    const s = norm(r.status)
-    if (s === 'present' || s === 'late') b.present += 1
-    else b.absent += 1
-  }
-  return buckets
+  const total = Math.max(people.length, present)
+  return { present, out, late, selfies, total, notIn: Math.max(total - present, 0) }
 }
 
 export function taskCounts(tasks) {
@@ -113,42 +89,6 @@ export function taskCounts(tasks) {
     else counts.pending += 1
   }
   return counts
-}
-
-export function financeSummary(fees) {
-  const now = new Date()
-  const monthKey = `${now.getFullYear()}-${now.getMonth()}`
-  let total = 0
-  let thisMonth = 0
-  let unpaidCount = 0
-  for (const f of fees) {
-    const amount = Number(f.paid) || 0
-    total += amount
-    const d = f.date ? new Date(f.date) : null
-    if (d && `${d.getFullYear()}-${d.getMonth()}` === monthKey) thisMonth += amount
-    if (f.reminder && f.reminder !== 'Tuition-paid') unpaidCount += 1
-  }
-  return { total, thisMonth, unpaidCount }
-}
-
-// Daily fee totals for the last `days` days → [{ label, value }]
-export function feeTrend(fees, days = 7) {
-  const buckets = []
-  const index = new Map()
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    const label = d.toLocaleDateString(undefined, { weekday: 'short' })
-    index.set(key, buckets.length)
-    buckets.push({ label, value: 0 })
-  }
-  for (const f of fees) {
-    if (!f.date) continue
-    const key = new Date(f.date).toISOString().slice(0, 10)
-    if (index.has(key)) buckets[index.get(key)].value += Number(f.paid) || 0
-  }
-  return buckets
 }
 
 // Top rewards (+) and faults (−) from salary records.

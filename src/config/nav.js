@@ -12,16 +12,13 @@ export const navGroups = [
   {
     title: 'Management',
     items: [
-      { to: '/students', label: 'Student Management', short: 'Students', icon: 'fa-user-graduate' },
       { to: '/staff', label: 'HR Management', short: 'Staff', icon: 'fa-people-group' },
-      { to: '/fees', label: 'Finance Management', short: 'Finance', icon: 'fa-file-invoice-dollar' },
       { to: '/salary', label: 'Rewards & Faults', short: 'Salary', icon: 'fa-trophy' },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { to: '/attendance', label: 'Attendance Monitor', short: 'Attendance', icon: 'fa-user-check' },
       { to: '/biometry', label: 'Staff Attendance', short: 'Biometry', icon: 'fa-fingerprint' },
       { to: '/tasks', label: 'Daily Tasks', short: 'Tasks', icon: 'fa-clipboard-check' },
       { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },

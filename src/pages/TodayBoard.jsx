@@ -102,8 +102,8 @@ export default function TodayBoard() {
       <div className="mb-4 flex gap-2">
         {[
           ['all', 'Everyone'],
-          ['student', 'Students'],
           ['teacher', 'Teachers'],
+          ['staff', 'Staff'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -123,7 +123,7 @@ export default function TodayBoard() {
       {!data && !error && <p className="py-8 text-center text-[13px] text-slate-400">Loading…</p>}
       {data && rows.length === 0 && (
         <p className="py-8 text-center text-[13px] text-slate-400">
-          No one has an app login yet — create students or teachers with emails first.
+          No one has an app login yet — create teachers or staff with emails first.
         </p>
       )}
 

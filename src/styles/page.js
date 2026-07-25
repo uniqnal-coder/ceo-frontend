@@ -1,5 +1,5 @@
 // Shared style tokens for the CRUD resource pages (Tasks, Salary, Feedback,
-// Evaluations, Biometry, Attendance — and available to Students/Staff/Fees).
+// Evaluations, Biometry — and available to Staff and the other HR pages).
 // Modernized to match the dashboard design system: soft shadows, 16px radii,
 // an 8px spacing rhythm, brand-green primary actions and a neutral slate scale.
 const C = {
