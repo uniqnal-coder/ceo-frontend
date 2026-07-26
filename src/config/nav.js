@@ -21,6 +21,7 @@ export const navGroups = [
     items: [
       { to: '/biometry', label: 'Staff Attendance', short: 'Biometry', icon: 'fa-fingerprint' },
       { to: '/tasks', label: 'Task', short: 'Task', icon: 'fa-clipboard-check' },
+      { to: '/auto-task', label: 'Auto Task', short: 'Auto', icon: 'fa-wand-magic-sparkles' },
       { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
       { to: '/daily-reports', label: 'Daily Reports', short: 'Reports Feed', icon: 'fa-file-lines' },
     ],

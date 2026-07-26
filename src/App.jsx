@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Staff from './pages/Staff';
 import Tasks from './pages/Tasks';
+import AutoTask from './pages/AutoTask';
 import Feedback from './pages/Feedback';
 import Salary from './pages/Salary';
 import Biometry from './pages/Biometry';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/staff" element={<Staff />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/auto-task" element={<AutoTask />} />
           <Route path="/feedback" element={<Feedback />} />
           <Route path="/salary" element={<Salary />} />
           <Route path="/biometry" element={<Biometry />} />
