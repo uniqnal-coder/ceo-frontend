@@ -20,7 +20,7 @@ export const navGroups = [
     title: 'Operations',
     items: [
       { to: '/biometry', label: 'Staff Attendance', short: 'Biometry', icon: 'fa-fingerprint' },
-      { to: '/tasks', label: 'Daily Tasks', short: 'Tasks', icon: 'fa-clipboard-check' },
+      { to: '/tasks', label: 'Task', short: 'Task', icon: 'fa-clipboard-check' },
       { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
       { to: '/daily-reports', label: 'Daily Reports', short: 'Reports Feed', icon: 'fa-file-lines' },
     ],

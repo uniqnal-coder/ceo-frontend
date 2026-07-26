@@ -4,7 +4,6 @@ import {
   fetchDashboard,
   markAllNotificationsRead,
   checkinCounts,
-  taskCounts,
   rewardsAndFaults,
   timeAgo,
 } from '../api/dashboard'
@@ -13,22 +12,8 @@ import Skeleton from '../components/ui/Skeleton'
 const money = (n) => `$${Number(n || 0).toLocaleString()}`
 const pctOf = (part, total) => (total ? Math.round((part / total) * 1000) / 10 : null)
 
-const PRIORITY_STYLE = {
-  urgent: 'bg-red-100 text-red-700',
-  high: 'bg-red-50 text-red-600',
-  medium: 'bg-amber-50 text-amber-600',
-  low: 'bg-brand-soft text-brand',
-}
 
-const STATUS_STYLE = {
-  completed: 'bg-brand-soft text-brand',
-  'in progress': 'bg-blue-50 text-kpi-blue',
-  inprogress: 'bg-blue-50 text-kpi-blue',
-  pending: 'bg-amber-50 text-amber-600',
-  cancelled: 'bg-slate-100 text-slate-500',
-}
 
-const chipClass = (map, value) => map[String(value || '').toLowerCase()] || 'bg-slate-100 text-slate-600'
 
 const NOTIF_ICON = {
   attendance: { icon: 'fa-user-check', color: 'bg-brand-soft text-brand' },
@@ -60,7 +45,6 @@ export default function Home() {
     if (!data) return null
     return {
       checkins: checkinCounts(data.checkinsToday),
-      tasks: taskCounts(data.tasks),
       rf: rewardsAndFaults(data.salary),
     }
   }, [data])
@@ -84,7 +68,6 @@ export default function Home() {
   const staffAppTotal = people.filter((p) => p.role === 'staff').length
   const healthy = data.health?.status === 'healthy'
   const dbOnline = data.health?.database === 'connected'
-  const recentTasks = data.tasks.slice(0, 5)
   const staffName = (id) => data.staff.find((s) => s.id === id)?.name || '—'
   const unread = notifs.filter((n) => !n.read).length
   const biometryTotal = data.biometryDenied ? null : data.biometry.length
@@ -213,43 +196,42 @@ export default function Home() {
           className="xl:col-span-5"
           icon="fa-list-check"
           iconColor="text-kpi-blue"
-          title="Daily Task Division (Auto)"
-          action={<CardLink to="/tasks" label="View All Tasks" />}
+          title="Role Task Lists"
+          action={<CardLink to="/tasks" label="Manage Tasks" />}
         >
-          {recentTasks.length === 0 ? (
-            <Empty text="No tasks yet" cta={{ to: '/tasks', label: 'Create the first task' }} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <Th>Task</Th>
-                    <Th>Assigned To</Th>
-                    <Th>Priority</Th>
-                    <Th>Deadline</Th>
-                    <Th>Status</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTasks.map((t) => (
-                    <tr key={t.id}>
-                      <Td className="max-w-[150px] truncate font-medium text-slate-700">{t.title}</Td>
-                      <Td className="max-w-[100px] truncate text-slate-500">{staffName(t.assigned_to)}</Td>
-                      <Td><Chip className={chipClass(PRIORITY_STYLE, t.priority)}>{t.priority || '—'}</Chip></Td>
-                      <Td className="whitespace-nowrap text-slate-500">
-                        {t.due_date ? new Date(t.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
-                      </Td>
-                      <Td><Chip className={chipClass(STATUS_STYLE, t.status)}>{t.status || 'Pending'}</Chip></Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              ['teacher', 'Teacher Tasks', 'fa-person-chalkboard', 'text-kpi-sky'],
+              ['staff', 'Staff Tasks', 'fa-user-tie', 'text-kpi-purple'],
+            ].map(([key, label, icon, color]) => {
+              const list = data.roleTasks?.[key] || []
+              return (
+                <div key={key} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
+                  <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <i className={`fas ${icon} ${color}`} /> {label}
+                    <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate-500">{list.length}</span>
+                  </p>
+                  {list.length === 0 ? (
+                    <p className="py-2 text-[11.5px] text-slate-300">No tasks defined yet</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {list.slice(0, 4).map((t, i) => (
+                        <li key={t.id} className="flex items-center gap-2 text-[12.5px] text-slate-600">
+                          <span className="text-[10px] font-extrabold text-slate-300">{i + 1}.</span>
+                          <span className="truncate">{t.title}</span>
+                        </li>
+                      ))}
+                      {list.length > 4 && (
+                        <li className="text-[11px] text-slate-400">+{list.length - 4} more…</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
+          </div>
           <p className="mt-3 border-t border-slate-100 pt-2.5 text-[11px] text-slate-400">
-            <b className="text-amber-600">{derived.tasks.pending}</b> pending ·{' '}
-            <b className="text-kpi-blue">{derived.tasks.inProgress}</b> in progress ·{' '}
-            <b className="text-brand">{derived.tasks.completed}</b> completed
+            The standard task list every teacher and staff member follows — edit it in the Task section.
           </p>
         </Card>
 
@@ -423,23 +405,6 @@ function MiniStat({ label, value, tone }) {
   )
 }
 
-// Compact header/data cells — the global table base styles are sized for
-// full CRUD pages; the dashboard card needs a denser grid.
-function Th({ children }) {
-  return <th className="bg-transparent px-2 py-1.5 text-[10px] first:pl-0 last:pr-0">{children}</th>
-}
-
-function Td({ className = '', children }) {
-  return <td className={`px-2 py-2 text-[12px] first:pl-0 last:pr-0 ${className}`}>{children}</td>
-}
-
-function Chip({ className = '', children }) {
-  return (
-    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold capitalize ${className}`}>
-      {children}
-    </span>
-  )
-}
 
 function ReportTile({ to, icon, color, title }) {
   return (

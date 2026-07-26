@@ -14,7 +14,7 @@ const settle = (result, fallback) => (result.status === 'fulfilled' ? result.val
 export async function fetchDashboard() {
   const [
     staff,
-    tasks,
+    roleTasks,
     checkins,
     notifications,
     salary,
@@ -22,7 +22,7 @@ export async function fetchDashboard() {
     health,
   ] = await Promise.allSettled([
     api.get('/api/staff?page=1&limit=500'),
-    api.get('/api/tasks?page=1&limit=200&sortBy=created_at&order=desc'),
+    api.get('/api/role-tasks'),
     api.get(`/api/checkins/overview?date=${todayISO()}`),
     api.get('/api/notifications'),
     api.get('/api/salary?page=1&limit=200'),
@@ -31,13 +31,11 @@ export async function fetchDashboard() {
   ])
 
   const staffRes = settle(staff, null)
-  const tasksRes = settle(tasks, null)
 
   return {
     staff: toArray(staffRes ?? []),
     staffTotal: staffRes?.pagination?.total ?? toArray(staffRes ?? []).length,
-    tasks: toArray(tasksRes ?? []),
-    tasksTotal: tasksRes?.pagination?.total ?? toArray(tasksRes ?? []).length,
+    roleTasks: settle(roleTasks, { teacher: [], staff: [] }),
     checkinsToday: settle(checkins, { checkins: [], people: [] }),
     notifications: toArray(settle(notifications, [])),
     salary: toArray(settle(salary, null) ?? []),
@@ -79,17 +77,6 @@ export function checkinCounts(overview) {
   return { present, out, late, selfies, total, notIn: Math.max(total - present, 0) }
 }
 
-export function taskCounts(tasks) {
-  const counts = { pending: 0, inProgress: 0, completed: 0, cancelled: 0 }
-  for (const t of tasks) {
-    const s = norm(t.status)
-    if (s === 'completed') counts.completed += 1
-    else if (s === 'inprogress') counts.inProgress += 1
-    else if (s === 'cancelled') counts.cancelled += 1
-    else counts.pending += 1
-  }
-  return counts
-}
 
 // Top rewards (+) and faults (−) from salary records.
 export function rewardsAndFaults(salaryRecords, limit = 3) {
