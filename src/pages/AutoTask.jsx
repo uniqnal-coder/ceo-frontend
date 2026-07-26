@@ -3,7 +3,42 @@ import { toast } from '../utils/toast';
 import { api, toArray } from '../api/client';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const yearEndISO = () => `${new Date().getFullYear()}-12-31`;
 const HISTORY_PAGE = 25;
+
+const REPEATS = [
+  { key: 'once', label: 'Once' },
+  { key: 'daily', label: 'Daily (working days)' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+];
+
+// Expand a schedule into concrete dates (max 366). Weekend = Fri + Sat.
+const localISO = (dt) =>
+  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+function computeDates(repeat, dueDate, fromDate, toDate) {
+  if (repeat === 'once') return dueDate ? [dueDate] : [];
+  if (!fromDate || !toDate) return [];
+  const out = [];
+  const end = new Date(`${toDate}T00:00:00`);
+  const d = new Date(`${fromDate}T00:00:00`);
+  const dayOfMonth = d.getDate();
+  while (d <= end && out.length < 366) {
+    const dow = d.getDay();
+    if (repeat === 'daily') {
+      if (dow !== 5 && dow !== 6) out.push(localISO(d));
+      d.setDate(d.getDate() + 1);
+    } else if (repeat === 'weekly') {
+      out.push(localISO(d));
+      d.setDate(d.getDate() + 7);
+    } else {
+      out.push(localISO(d));
+      d.setMonth(d.getMonth() + 1, dayOfMonth);
+    }
+  }
+  return out;
+}
 
 const ROLE_BADGE = {
   teacher: 'bg-violet-50 text-violet-600',
@@ -22,7 +57,10 @@ export default function AutoTask() {
   const [taskSearch, setTaskSearch] = useState('');
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
+  const [repeat, setRepeat] = useState('once');
   const [dueDate, setDueDate] = useState(todayISO());
+  const [fromDate, setFromDate] = useState(todayISO());
+  const [toDate, setToDate] = useState(yearEndISO());
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState(null);
   const [historyDone, setHistoryDone] = useState(false);
@@ -115,24 +153,35 @@ export default function AutoTask() {
     });
   };
 
+  const dates = useMemo(
+    () => computeDates(repeat, dueDate, fromDate, toDate),
+    [repeat, dueDate, fromDate, toDate]
+  );
+  const totalAssignments = selectedUsers.size * selected.size * dates.length;
+  const overLimit = totalAssignments > 25000;
+
   const save = async () => {
-    if (selectedUsers.size === 0 || selected.size === 0 || !dueDate) return;
+    if (selectedUsers.size === 0 || selected.size === 0 || dates.length === 0 || overLimit) return;
     setSaving(true);
     try {
       const r = await api.post('/api/staff-tasks/bulk', {
         user_ids: [...selectedUsers],
         titles: roleTasks.map((t) => t.title).filter((t) => selected.has(t)),
-        due_at: dueDate,
+        dates,
       });
       toast.success(
         `Assigned ${r.created} task${r.created === 1 ? '' : 's'} across ${r.users} user${r.users === 1 ? '' : 's'}` +
+        (r.days > 1 ? ` over ${r.days} days` : '') +
         (r.skipped ? ` (${r.skipped} duplicate${r.skipped === 1 ? '' : 's'} skipped)` : '')
       );
       setSelectedUsers(new Set());
       setUserSearch('');
       setTaskSearch('');
       setSelected(new Set());
+      setRepeat('once');
       setDueDate(todayISO());
+      setFromDate(todayISO());
+      setToDate(yearEndISO());
       loadHistory(true);
     } catch (e) {
       toast.error(e.message || 'Assignment failed');
@@ -260,26 +309,80 @@ export default function AutoTask() {
           </div>
         )}
 
-        {/* Step 3 — date + save */}
+        {/* Step 3 — schedule + save */}
         {activeRole && roleTasks.length > 0 && (
-          <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
-            <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Step 3 · Due date</p>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
-              />
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Step 3 · Schedule — plan a day, a month or the whole year
+            </p>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {REPEATS.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => setRepeat(r.key)}
+                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition ${
+                    repeat === r.key
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
-            <div className="flex flex-1 items-end justify-between gap-3 sm:justify-end">
+
+            <div className="flex flex-wrap items-end gap-3">
+              {repeat === 'once' ? (
+                <div>
+                  <p className="mb-1 text-[10.5px] font-semibold text-slate-400">Due date</p>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-semibold text-slate-400">From</p>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-semibold text-slate-400">To</p>
+                    <input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                    />
+                  </div>
+                  <p className="pb-2.5 text-[11px] text-slate-400">
+                    {repeat === 'daily' && 'Every working day (Fri & Sat skipped)'}
+                    {repeat === 'weekly' && 'Every week on the “From” weekday'}
+                    {repeat === 'monthly' && 'Every month on the “From” day'}
+                    {' · '}{dates.length} date{dates.length === 1 ? '' : 's'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-50 pt-3">
               <p className="text-[12.5px] font-bold text-slate-500">
-                {selectedUsers.size} user{selectedUsers.size === 1 ? '' : 's'} · {selected.size} task{selected.size === 1 ? '' : 's'}
-                <span className="text-slate-400"> = {selectedUsers.size * selected.size} assignment{selectedUsers.size * selected.size === 1 ? '' : 's'}</span>
+                {selectedUsers.size} user{selectedUsers.size === 1 ? '' : 's'} · {selected.size} task{selected.size === 1 ? '' : 's'} · {dates.length} date{dates.length === 1 ? '' : 's'}
+                <span className={overLimit ? 'font-extrabold text-danger' : 'text-slate-400'}>
+                  {' '}= {totalAssignments.toLocaleString()} assignment{totalAssignments === 1 ? '' : 's'}
+                  {overLimit && ' — over the 25,000 limit, narrow the range'}
+                </span>
               </p>
               <button
                 onClick={save}
-                disabled={saving || selected.size === 0 || selectedUsers.size === 0 || !dueDate}
+                disabled={saving || selected.size === 0 || selectedUsers.size === 0 || dates.length === 0 || overLimit}
                 className="rounded-xl bg-brand px-6 py-2.5 text-[13.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
                 {saving ? 'Assigning…' : 'Save & Assign'}
