@@ -6,6 +6,11 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearEndISO = () => `${new Date().getFullYear()}-12-31`;
 const HISTORY_PAGE = 25;
 
+const ROLE_BADGE = {
+  teacher: 'bg-violet-50 text-violet-600',
+  staff: 'bg-sky-50 text-sky-600',
+};
+
 const REPEATS = [
   { key: 'once', label: 'Once' },
   { key: 'daily', label: 'Daily (working days)' },
@@ -13,7 +18,10 @@ const REPEATS = [
   { key: 'monthly', label: 'Monthly' },
 ];
 
-// Expand a schedule into concrete dates (max 366). Weekend = Fri + Sat.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Expand a one-off/preview schedule into dates (max 366). Weekend = Fri + Sat.
 const localISO = (dt) =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 
@@ -40,28 +48,24 @@ function computeDates(repeat, dueDate, fromDate, toDate) {
   return out;
 }
 
-const ROLE_BADGE = {
-  teacher: 'bg-violet-50 text-violet-600',
-  staff: 'bg-sky-50 text-sky-600',
-};
-
-// Auto Task: pick one or many users of a role → the role's template
-// tasks appear → multi-select → due date → one Save assigns everything.
-// Built to stay fast with hundreds of users and long task lists:
-// searchable scrollable pickers, batched save, paginated history.
+// Auto Task: assign a role's tasks to one person or a whole team —
+// once, or as a recurring plan that generates tasks automatically.
 export default function AutoTask() {
   const [people, setPeople] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [detailUser, setDetailUser] = useState(null);
   const [roleTasks, setRoleTasks] = useState([]);
   const [taskSearch, setTaskSearch] = useState('');
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [repeat, setRepeat] = useState('once');
+  const [followList, setFollowList] = useState(true);
   const [dueDate, setDueDate] = useState(todayISO());
   const [fromDate, setFromDate] = useState(todayISO());
   const [toDate, setToDate] = useState(yearEndISO());
   const [saving, setSaving] = useState(false);
+  const [plans, setPlans] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyDone, setHistoryDone] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -80,14 +84,22 @@ export default function AutoTask() {
     }
   };
 
+  const loadPlans = async () => {
+    try {
+      setPlans(toArray(await api.get('/api/task-schedules')));
+    } catch {
+      setPlans([]);
+    }
+  };
+
   useEffect(() => {
     api.get(`/api/checkins/overview?date=${todayISO()}`)
       .then((d) => setPeople((d.people || []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => setPeople([]));
     loadHistory();
+    loadPlans();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // All selected users share one role — that role drives the task list.
   const activeRole = useMemo(() => {
     const first = people.find((p) => selectedUsers.has(p.id));
     return first?.role || null;
@@ -123,12 +135,9 @@ export default function AutoTask() {
     });
   };
 
-  // Select every visible user of the active (or searched) role.
   const selectAllUsers = () => {
-    const pool = activeRole
-      ? visiblePeople.filter((p) => p.role === activeRole)
-      : visiblePeople.filter((p) => p.role === visiblePeople[0]?.role);
-    setSelectedUsers(new Set(pool.map((p) => p.id)));
+    const role = activeRole || visiblePeople[0]?.role;
+    setSelectedUsers(new Set(visiblePeople.filter((p) => p.role === role).map((p) => p.id)));
   };
 
   const toggleTask = (title) => {
@@ -157,36 +166,82 @@ export default function AutoTask() {
     () => computeDates(repeat, dueDate, fromDate, toDate),
     [repeat, dueDate, fromDate, toDate]
   );
-  const totalAssignments = selectedUsers.size * selected.size * dates.length;
-  const overLimit = totalAssignments > 25000;
+  const recurring = repeat !== 'once';
+  const usingList = recurring && followList;
+  const taskCount = usingList ? roleTasks.length : selected.size;
+  const canSave = selectedUsers.size > 0 && taskCount > 0 &&
+    (recurring ? fromDate && toDate && toDate >= fromDate : !!dueDate);
+
+  const resetForm = () => {
+    setSelectedUsers(new Set());
+    setUserSearch('');
+    setTaskSearch('');
+    setSelected(new Set());
+    setRepeat('once');
+    setFollowList(true);
+    setDueDate(todayISO());
+    setFromDate(todayISO());
+    setToDate(yearEndISO());
+  };
 
   const save = async () => {
-    if (selectedUsers.size === 0 || selected.size === 0 || dates.length === 0 || overLimit) return;
+    if (!canSave || saving) return;
+    const titles = roleTasks.map((t) => t.title).filter((t) => selected.has(t));
     setSaving(true);
     try {
-      const r = await api.post('/api/staff-tasks/bulk', {
-        user_ids: [...selectedUsers],
-        titles: roleTasks.map((t) => t.title).filter((t) => selected.has(t)),
-        dates,
-      });
-      toast.success(
-        `Assigned ${r.created} task${r.created === 1 ? '' : 's'} across ${r.users} user${r.users === 1 ? '' : 's'}` +
-        (r.days > 1 ? ` over ${r.days} days` : '') +
-        (r.skipped ? ` (${r.skipped} duplicate${r.skipped === 1 ? '' : 's'} skipped)` : '')
-      );
-      setSelectedUsers(new Set());
-      setUserSearch('');
-      setTaskSearch('');
-      setSelected(new Set());
-      setRepeat('once');
-      setDueDate(todayISO());
-      setFromDate(todayISO());
-      setToDate(yearEndISO());
+      if (!recurring) {
+        const r = await api.post('/api/staff-tasks/bulk', {
+          user_ids: [...selectedUsers],
+          titles,
+          dates,
+        });
+        toast.success(
+          `Assigned ${r.created} task${r.created === 1 ? '' : 's'} across ${r.users} user${r.users === 1 ? '' : 's'}` +
+          (r.skipped ? ` (${r.skipped} duplicate${r.skipped === 1 ? '' : 's'} skipped)` : '')
+        );
+      } else {
+        const everyone = people.filter((p) => p.role === activeRole)
+          .every((p) => selectedUsers.has(p.id));
+        const r = await api.post('/api/task-schedules', {
+          role: activeRole,
+          user_ids: everyone ? [] : [...selectedUsers],
+          titles: usingList ? [] : titles,
+          repeat,
+          start_date: fromDate,
+          end_date: toDate,
+        });
+        toast.success(
+          `Recurring plan created — tasks generate automatically` +
+          (r.createdToday ? ` (${r.createdToday} created for today)` : '')
+        );
+        loadPlans();
+      }
+      resetForm();
       loadHistory(true);
     } catch (e) {
-      toast.error(e.message || 'Assignment failed');
+      toast.error(e.message || 'Save failed');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const togglePlan = async (plan) => {
+    try {
+      await api.patch(`/api/task-schedules/${plan.id}`, { active: !plan.active });
+      loadPlans();
+      if (!plan.active) loadHistory(true);
+    } catch (e) {
+      toast.error(e.message || 'Update failed');
+    }
+  };
+
+  const deletePlan = async (plan) => {
+    if (!confirm('Delete this recurring plan? Already-created tasks stay.')) return;
+    try {
+      await api.del(`/api/task-schedules/${plan.id}`);
+      loadPlans();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
     }
   };
 
@@ -195,7 +250,7 @@ export default function AutoTask() {
       <div className="mb-5">
         <h1 className="text-[22px] font-extrabold text-slate-800">⚡ Auto Task</h1>
         <p className="text-[13px] text-slate-500">
-          Assign a role's standard tasks to one person — or a whole team — in one save.
+          Assign a role's standard tasks once, or set a recurring plan that runs all year by itself.
         </p>
       </div>
 
@@ -212,7 +267,7 @@ export default function AutoTask() {
               </button>
             )}
             <button onClick={selectAllUsers} className="text-[11.5px] font-bold text-brand hover:underline">
-              Select all {activeRole ? `${activeRole}s` : ''}
+              Select all {activeRole ? (activeRole === 'staff' ? 'staff' : 'teachers') : ''}
             </button>
           </div>
         </div>
@@ -230,21 +285,32 @@ export default function AutoTask() {
               const on = selectedUsers.has(p.id);
               const locked = activeRole && p.role !== activeRole;
               return (
-                <button
+                <div
                   key={p.id}
-                  onClick={() => !locked && toggleUser(p)}
-                  disabled={locked}
-                  title={locked ? `Deselect ${activeRole}s first — one role per save` : undefined}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition ${
-                    on ? 'bg-brand-soft/50' : locked ? 'opacity-35' : 'hover:bg-slate-50'
+                  className={`flex items-center rounded-lg transition ${
+                    on ? 'bg-brand-soft/50' : 'hover:bg-slate-50'
                   }`}
                 >
-                  <i className={`fas ${on ? 'fa-square-check text-brand' : 'fa-square text-slate-200'} text-[15px]`} />
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-700">{p.name}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-400'}`}>
-                    {p.role}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => !locked && toggleUser(p)}
+                    disabled={locked}
+                    title={locked ? `Deselect ${activeRole}s first — one role per save` : undefined}
+                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left ${locked ? 'opacity-35' : ''}`}
+                  >
+                    <i className={`fas ${on ? 'fa-square-check text-brand' : 'fa-square text-slate-200'} text-[15px]`} />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-700">{p.name}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-400'}`}>
+                      {p.role}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setDetailUser(p)}
+                    title={`${p.name} — details & task calendar`}
+                    className="mx-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-white hover:text-brand"
+                  >
+                    <i className="fas fa-calendar-days text-[13px]" />
+                  </button>
+                </div>
               );
             })
           )}
@@ -260,20 +326,39 @@ export default function AutoTask() {
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Step 2 · Select tasks ({activeRole} list)
+                Step 2 · Tasks ({activeRole} list)
               </p>
-              {roleTasks.length > 0 && (
+              {!usingList && roleTasks.length > 0 && (
                 <button onClick={toggleAllTasks} className="text-[11.5px] font-bold text-brand hover:underline">
                   {allTasksSelected ? 'Clear all' : `Select all${taskSearch ? ' matching' : ''}`}
                 </button>
               )}
             </div>
 
+            {recurring && (
+              <label className="mb-2 flex cursor-pointer items-center gap-2.5 rounded-xl bg-slate-50 px-3.5 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={followList}
+                  onChange={(e) => setFollowList(e.target.checked)}
+                  className="h-4 w-4 accent-[color:var(--color-brand,#188a54)]"
+                />
+                <span className="text-[12.5px] font-semibold text-slate-600">
+                  Always follow the role's task list — when you edit the Task section, the plan updates automatically
+                </span>
+              </label>
+            )}
+
             {tasksLoading ? (
               <p className="py-6 text-center text-[13px] text-slate-400">Loading tasks…</p>
             ) : roleTasks.length === 0 ? (
               <p className="rounded-xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-700">
                 No tasks defined for the {activeRole} role yet — add them in the <b>Task</b> section first.
+              </p>
+            ) : usingList ? (
+              <p className="rounded-xl border border-brand/20 bg-brand-soft/30 px-4 py-3 text-[12.5px] font-semibold text-slate-600">
+                <i className="fas fa-rotate mr-1.5 text-brand" />
+                Using the full {activeRole} task list ({roleTasks.length} task{roleTasks.length === 1 ? '' : 's'}), always in sync with the Task section.
               </p>
             ) : (
               <>
@@ -313,7 +398,7 @@ export default function AutoTask() {
         {activeRole && roleTasks.length > 0 && (
           <div className="mt-5 border-t border-slate-100 pt-4">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Step 3 · Schedule — plan a day, a month or the whole year
+              Step 3 · Schedule — one day, or a plan that runs by itself
             </p>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {REPEATS.map((r) => (
@@ -332,7 +417,7 @@ export default function AutoTask() {
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
-              {repeat === 'once' ? (
+              {!recurring ? (
                 <div>
                   <p className="mb-1 text-[10.5px] font-semibold text-slate-400">Due date</p>
                   <input
@@ -366,7 +451,7 @@ export default function AutoTask() {
                     {repeat === 'daily' && 'Every working day (Fri & Sat skipped)'}
                     {repeat === 'weekly' && 'Every week on the “From” weekday'}
                     {repeat === 'monthly' && 'Every month on the “From” day'}
-                    {' · '}{dates.length} date{dates.length === 1 ? '' : 's'}
+                    {' · ~'}{dates.length} day{dates.length === 1 ? '' : 's'}
                   </p>
                 </>
               )}
@@ -374,23 +459,69 @@ export default function AutoTask() {
 
             <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-50 pt-3">
               <p className="text-[12.5px] font-bold text-slate-500">
-                {selectedUsers.size} user{selectedUsers.size === 1 ? '' : 's'} · {selected.size} task{selected.size === 1 ? '' : 's'} · {dates.length} date{dates.length === 1 ? '' : 's'}
-                <span className={overLimit ? 'font-extrabold text-danger' : 'text-slate-400'}>
-                  {' '}= {totalAssignments.toLocaleString()} assignment{totalAssignments === 1 ? '' : 's'}
-                  {overLimit && ' — over the 25,000 limit, narrow the range'}
-                </span>
+                {selectedUsers.size} user{selectedUsers.size === 1 ? '' : 's'} · {usingList ? `role list (${roleTasks.length})` : `${selected.size} task${selected.size === 1 ? '' : 's'}`}
+                {recurring
+                  ? <span className="text-slate-400"> · generated automatically each {repeat === 'daily' ? 'working day' : repeat.replace('ly', '')}</span>
+                  : <span className="text-slate-400"> = {selectedUsers.size * selected.size} assignment{selectedUsers.size * selected.size === 1 ? '' : 's'}</span>}
               </p>
               <button
                 onClick={save}
-                disabled={saving || selected.size === 0 || selectedUsers.size === 0 || dates.length === 0 || overLimit}
+                disabled={saving || !canSave}
                 className="rounded-xl bg-brand px-6 py-2.5 text-[13.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
-                {saving ? 'Assigning…' : 'Save & Assign'}
+                {saving ? 'Saving…' : recurring ? 'Create Recurring Plan' : 'Save & Assign'}
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Recurring plans */}
+      {plans && plans.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Recurring plans
+          </p>
+          <div className="space-y-2">
+            {plans.map((plan) => (
+              <div key={plan.id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 px-3.5 py-2.5">
+                <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>
+                  {plan.role}
+                </span>
+                <span className="text-[12.5px] font-bold text-slate-700">
+                  {REPEATS.find((r) => r.key === plan.repeat)?.label || plan.repeat}
+                </span>
+                <span className="text-[11.5px] text-slate-500">
+                  {plan.user_ids?.length ? `${plan.user_ids.length} user${plan.user_ids.length === 1 ? '' : 's'}` : `All ${plan.role === 'staff' ? 'staff' : 'teachers'}`}
+                  {' · '}
+                  {plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list (auto)'}
+                  {' · '}
+                  {plan.start_date} → {plan.end_date}
+                </span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  <button
+                    onClick={() => togglePlan(plan)}
+                    className={`rounded-full px-3 py-1 text-[11px] font-extrabold transition ${
+                      plan.active
+                        ? 'bg-brand-soft text-brand hover:opacity-80'
+                        : 'bg-slate-200 text-slate-500 hover:opacity-80'
+                    }`}
+                  >
+                    {plan.active ? '● Active' : '⏸ Paused'}
+                  </button>
+                  <button
+                    onClick={() => deletePlan(plan)}
+                    title="Delete plan"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                  >
+                    <i className="fas fa-trash text-[11px]" />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* History */}
       <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -454,6 +585,209 @@ export default function AutoTask() {
           </>
         )}
       </div>
+
+      {detailUser && (
+        <UserDetailDialog person={detailUser} onClose={() => setDetailUser(null)} />
+      )}
+    </div>
+  );
+}
+
+/* ============ Per-user profile: stats + task calendar ============ */
+
+function UserDetailDialog({ person, onClose }) {
+  const [tasks, setTasks] = useState(null);
+  const now = new Date();
+  const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
+  const [dayISO, setDayISO] = useState(todayISO());
+
+  useEffect(() => {
+    api.get(`/api/staff-tasks/user/${person.id}`)
+      .then((d) => setTasks(toArray(d)))
+      .catch(() => setTasks([]));
+  }, [person.id]);
+
+  const today = todayISO();
+  const dayOf = (t) => String(t.due_at || t.created_at || '').slice(0, 10);
+  const bucketOf = (t) =>
+    t.status === 'completed' ? 'done' : dayOf(t) < today ? 'overdue' : 'pending';
+
+  const stats = useMemo(() => {
+    const s = { total: 0, done: 0, pending: 0, overdue: 0 };
+    for (const t of tasks || []) {
+      s.total += 1;
+      s[bucketOf(t)] += 1;
+    }
+    return s;
+  }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const byDay = useMemo(() => {
+    const map = new Map();
+    for (const t of tasks || []) {
+      const d = dayOf(t);
+      if (!d) continue;
+      const cell = map.get(d) || { done: 0, pending: 0, overdue: 0 };
+      cell[bucketOf(t)] += 1;
+      map.set(d, cell);
+    }
+    return map;
+  }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pct = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
+
+  // Calendar cells: week starts Sunday (weekend here is Fri + Sat).
+  const cells = useMemo(() => {
+    const first = new Date(month.y, month.m, 1);
+    const blanks = Array.from({ length: first.getDay() }, () => null);
+    const count = new Date(month.y, month.m + 1, 0).getDate();
+    const days = Array.from({ length: count }, (_, i) =>
+      `${month.y}-${String(month.m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+    return [...blanks, ...days];
+  }, [month]);
+
+  const shiftMonth = (delta) => {
+    setMonth(({ y, m }) => {
+      const d = new Date(y, m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  };
+
+  const dayTasks = (tasks || []).filter((t) => dayOf(t) === dayISO);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="mb-4 flex items-center gap-3">
+          <span className={`flex h-11 w-11 items-center justify-center rounded-xl text-[15px] font-extrabold ${ROLE_BADGE[person.role] || 'bg-slate-100 text-slate-500'}`}>
+            {person.name.slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[16px] font-extrabold text-slate-800">{person.name}</p>
+            <p className="text-[11.5px] font-bold uppercase text-slate-400">{person.role}</p>
+          </div>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+            <i className="fas fa-xmark" />
+          </button>
+        </div>
+
+        {!tasks ? (
+          <p className="py-10 text-center text-[13px] text-slate-400">Loading…</p>
+        ) : (
+          <>
+            {/* Stat tiles */}
+            <div className="grid grid-cols-4 gap-2">
+              <StatTile label="Total" value={stats.total} tone="text-slate-800" soft="bg-slate-50" />
+              <StatTile label="Completed" value={stats.done} tone="text-brand" soft="bg-brand-soft/50" />
+              <StatTile label="Pending" value={stats.pending} tone="text-amber-600" soft="bg-amber-50" />
+              <StatTile label="Overdue" value={stats.overdue} tone="text-red-500" soft="bg-red-50" />
+            </div>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-[12px] font-extrabold text-slate-600">{pct}% done</span>
+            </div>
+
+            {/* Calendar */}
+            <div className="mt-4 rounded-xl border border-slate-100 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <button onClick={() => shiftMonth(-1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+                  <i className="fas fa-chevron-left text-[11px]" />
+                </button>
+                <p className="text-[13px] font-extrabold text-slate-700">
+                  {MONTHS[month.m]} {month.y}
+                </p>
+                <button onClick={() => shiftMonth(1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+                  <i className="fas fa-chevron-right text-[11px]" />
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                  <span key={i} className={`py-1 text-[10px] font-extrabold ${i >= 5 ? 'text-red-300' : 'text-slate-400'}`}>{d}</span>
+                ))}
+                {cells.map((d, i) => {
+                  if (!d) return <span key={`b${i}`} />;
+                  const c = byDay.get(d);
+                  const isToday = d === today;
+                  const isSel = d === dayISO;
+                  const tone = !c ? '' :
+                    c.overdue ? 'bg-red-50 text-red-600' :
+                    c.pending ? 'bg-amber-50 text-amber-600' :
+                    'bg-brand-soft text-brand';
+                  const total = c ? c.done + c.pending + c.overdue : 0;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setDayISO(d)}
+                      className={`relative flex h-10 flex-col items-center justify-center rounded-lg text-[12px] font-bold transition ${
+                        tone || 'text-slate-600 hover:bg-slate-50'
+                      } ${isSel ? 'ring-2 ring-brand' : isToday ? 'ring-1 ring-slate-300' : ''}`}
+                    >
+                      {Number(d.slice(8))}
+                      {total > 0 && (
+                        <span className="text-[8.5px] font-extrabold leading-none opacity-80">{total} task{total === 1 ? '' : 's'}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] font-bold text-slate-400">
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-brand" />All done</span>
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />Pending</span>
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-400" />Overdue</span>
+              </div>
+            </div>
+
+            {/* Selected day */}
+            <div className="mt-3">
+              <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+                {new Date(`${dayISO}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
+              {dayTasks.length === 0 ? (
+                <p className="rounded-xl bg-slate-50 px-3.5 py-3 text-[12px] text-slate-400">No tasks on this day</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {dayTasks.map((t) => {
+                    const b = bucketOf(t);
+                    return (
+                      <li key={t.id} className="flex items-center gap-2.5 rounded-xl border border-slate-100 px-3.5 py-2.5">
+                        <i className={`fas ${
+                          b === 'done' ? 'fa-circle-check text-brand' :
+                          b === 'overdue' ? 'fa-circle-exclamation text-red-400' :
+                          'fa-clock text-amber-400'
+                        } text-[14px]`} />
+                        <span className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${b === 'done' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                          {t.title}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                          b === 'done' ? 'bg-brand-soft text-brand' :
+                          b === 'overdue' ? 'bg-red-50 text-red-500' :
+                          'bg-amber-50 text-amber-600'
+                        }`}>
+                          {b === 'done' ? 'Done' : b === 'overdue' ? 'Overdue' : 'Pending'}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatTile({ label, value, tone, soft }) {
+  return (
+    <div className={`rounded-xl px-2 py-2.5 text-center ${soft}`}>
+      <p className={`text-[19px] font-extrabold leading-6 ${tone}`}>{value}</p>
+      <p className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
     </div>
   );
 }
