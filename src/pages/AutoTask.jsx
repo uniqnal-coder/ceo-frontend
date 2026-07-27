@@ -16,7 +16,23 @@ const REPEATS = [
   { key: 'daily', label: 'Daily (working days)' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
+  { key: 'custom', label: 'Custom days' },
 ];
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Does a recurring plan fire on this date? Mirrors the backend rule.
+function planFiresOn(plan, dayISO) {
+  if (dayISO < plan.start_date || dayISO > plan.end_date) return false;
+  const d = new Date(`${dayISO}T00:00:00`);
+  const a = new Date(`${plan.anchor_date}T00:00:00`);
+  const dow = d.getDay();
+  if (plan.repeat === 'daily') return dow !== 5 && dow !== 6;
+  if (plan.repeat === 'custom') return (plan.weekdays || []).map(Number).includes(dow);
+  if (plan.repeat === 'weekly') return dow === a.getDay();
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return d.getDate() === Math.min(a.getDate(), last);
+}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -25,7 +41,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 const localISO = (dt) =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 
-function computeDates(repeat, dueDate, fromDate, toDate) {
+function computeDates(repeat, dueDate, fromDate, toDate, weekdays = []) {
   if (repeat === 'once') return dueDate ? [dueDate] : [];
   if (!fromDate || !toDate) return [];
   const out = [];
@@ -36,6 +52,9 @@ function computeDates(repeat, dueDate, fromDate, toDate) {
     const dow = d.getDay();
     if (repeat === 'daily') {
       if (dow !== 5 && dow !== 6) out.push(localISO(d));
+      d.setDate(d.getDate() + 1);
+    } else if (repeat === 'custom') {
+      if (weekdays.includes(dow)) out.push(localISO(d));
       d.setDate(d.getDate() + 1);
     } else if (repeat === 'weekly') {
       out.push(localISO(d));
@@ -60,12 +79,15 @@ export default function AutoTask() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [repeat, setRepeat] = useState('once');
+  const [weekdaysSel, setWeekdaysSel] = useState(new Set([0, 2, 4]));
   const [followList, setFollowList] = useState(true);
   const [dueDate, setDueDate] = useState(todayISO());
   const [fromDate, setFromDate] = useState(todayISO());
   const [toDate, setToDate] = useState(yearEndISO());
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState(null);
+  const [editPlan, setEditPlan] = useState(null);
+  const [view, setView] = useState('assign');
   const [history, setHistory] = useState(null);
   const [historyDone, setHistoryDone] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -163,13 +185,14 @@ export default function AutoTask() {
   };
 
   const dates = useMemo(
-    () => computeDates(repeat, dueDate, fromDate, toDate),
-    [repeat, dueDate, fromDate, toDate]
+    () => computeDates(repeat, dueDate, fromDate, toDate, [...weekdaysSel]),
+    [repeat, dueDate, fromDate, toDate, weekdaysSel]
   );
   const recurring = repeat !== 'once';
   const usingList = recurring && followList;
   const taskCount = usingList ? roleTasks.length : selected.size;
   const canSave = selectedUsers.size > 0 && taskCount > 0 &&
+    (repeat === 'custom' ? weekdaysSel.size > 0 : true) &&
     (recurring ? fromDate && toDate && toDate >= fromDate : !!dueDate);
 
   const resetForm = () => {
@@ -207,6 +230,7 @@ export default function AutoTask() {
           user_ids: everyone ? [] : [...selectedUsers],
           titles: usingList ? [] : titles,
           repeat,
+          weekdays: repeat === 'custom' ? [...weekdaysSel] : [],
           start_date: fromDate,
           end_date: toDate,
         });
@@ -247,14 +271,38 @@ export default function AutoTask() {
 
   return (
     <div className="mx-auto max-w-4xl p-5">
-      <div className="mb-5">
-        <h1 className="text-[22px] font-extrabold text-slate-800">⚡ Auto Task</h1>
-        <p className="text-[13px] text-slate-500">
-          Assign a role's standard tasks once, or set a recurring plan that runs all year by itself.
-        </p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-extrabold text-slate-800">⚡ Auto Task</h1>
+          <p className="text-[13px] text-slate-500">
+            Assign a role's standard tasks once, or set a recurring plan that runs all year by itself.
+          </p>
+        </div>
+        <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+          {[['assign', 'fa-bolt', 'Assign'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12.5px] font-extrabold transition ${
+                view === key ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <i className={`fas ${icon} text-[11px]`} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      {view === 'planner' && (
+        <PlannerView
+          plans={plans || []}
+          people={people}
+          onEditPlan={setEditPlan}
+          onTogglePlan={togglePlan}
+        />
+      )}
+
+      <div className={view === 'assign' ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
         {/* Step 1 — users */}
         <div className="mb-2 flex items-center justify-between">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -447,10 +495,37 @@ export default function AutoTask() {
                       className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
                     />
                   </div>
+                  {repeat === 'custom' && (
+                    <div className="pb-1">
+                      <p className="mb-1 text-[10.5px] font-semibold text-slate-400">On these days</p>
+                      <div className="flex gap-1">
+                        {WEEKDAY_LABELS.map((label, i) => {
+                          const on = weekdaysSel.has(i);
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => setWeekdaysSel((prev) => {
+                                const nextSel = new Set(prev);
+                                if (nextSel.has(i)) nextSel.delete(i);
+                                else nextSel.add(i);
+                                return nextSel;
+                              })}
+                              className={`h-9 w-10 rounded-lg text-[11px] font-extrabold transition ${
+                                on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <p className="pb-2.5 text-[11px] text-slate-400">
                     {repeat === 'daily' && 'Every working day (Fri & Sat skipped)'}
                     {repeat === 'weekly' && 'Every week on the “From” weekday'}
                     {repeat === 'monthly' && 'Every month on the “From” day'}
+                    {repeat === 'custom' && `Every ${[...weekdaysSel].sort().map((i) => WEEKDAY_LABELS[i]).join(', ') || '—'}`}
                     {' · ~'}{dates.length} day{dates.length === 1 ? '' : 's'}
                   </p>
                 </>
@@ -477,7 +552,7 @@ export default function AutoTask() {
       </div>
 
       {/* Recurring plans */}
-      {plans && plans.length > 0 && (
+      {view === 'assign' && plans && plans.length > 0 && (
         <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Recurring plans
@@ -510,6 +585,13 @@ export default function AutoTask() {
                     {plan.active ? '● Active' : '⏸ Paused'}
                   </button>
                   <button
+                    onClick={() => setEditPlan(plan)}
+                    title="Edit / reschedule plan"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-brand"
+                  >
+                    <i className="fas fa-pen text-[11px]" />
+                  </button>
+                  <button
                     onClick={() => deletePlan(plan)}
                     title="Delete plan"
                     className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
@@ -524,7 +606,7 @@ export default function AutoTask() {
       )}
 
       {/* History */}
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className={view === 'assign' ? 'mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
         <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Assignment history
         </p>
@@ -589,6 +671,288 @@ export default function AutoTask() {
       {detailUser && (
         <UserDetailDialog person={detailUser} onClose={() => setDetailUser(null)} />
       )}
+      {editPlan && (
+        <PlanEditDialog
+          plan={editPlan}
+          onClose={() => setEditPlan(null)}
+          onSaved={() => { setEditPlan(null); loadPlans(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ============ Year Planner: month calendar of plans + assignments ============ */
+
+function PlannerView({ plans, people, onEditPlan, onTogglePlan }) {
+  const now = new Date();
+  const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
+  const [summary, setSummary] = useState({});
+  const [selDay, setSelDay] = useState(todayISO());
+
+  const monthStart = `${month.y}-${String(month.m + 1).padStart(2, '0')}-01`;
+  const monthEnd = `${month.y}-${String(month.m + 1).padStart(2, '0')}-${String(new Date(month.y, month.m + 1, 0).getDate()).padStart(2, '0')}`;
+
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/staff-tasks/summary?from=${monthStart}&to=${monthEnd}`)
+      .then((d) => { if (live) setSummary(d || {}); })
+      .catch(() => { if (live) setSummary({}); });
+    return () => { live = false; };
+  }, [monthStart, monthEnd]);
+
+  const today = todayISO();
+  const cells = useMemo(() => {
+    const first = new Date(month.y, month.m, 1);
+    const blanks = Array.from({ length: first.getDay() }, () => null);
+    const count = new Date(month.y, month.m + 1, 0).getDate();
+    const days = Array.from({ length: count }, (_, i) =>
+      `${month.y}-${String(month.m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+    return [...blanks, ...days];
+  }, [month]);
+
+  const shiftMonth = (delta) => {
+    setMonth(({ y, m }) => {
+      const d = new Date(y, m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  };
+
+  const firing = (day) => plans.filter((p) => p.active && planFiresOn(p, day));
+  const roleUserCount = (plan) =>
+    plan.user_ids?.length || people.filter((p) => p.role === plan.role).length;
+  const planTaskLabel = (plan) =>
+    plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list';
+
+  const dayPlans = firing(selDay);
+  const daySum = summary[selDay];
+
+  return (
+    <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <button onClick={() => shiftMonth(-1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+          <i className="fas fa-chevron-left text-[12px]" />
+        </button>
+        <p className="text-[15px] font-extrabold text-slate-800">
+          {MONTHS[month.m]} {month.y}
+        </p>
+        <button onClick={() => shiftMonth(1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+          <i className="fas fa-chevron-right text-[12px]" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1.5 text-center">
+        {WEEKDAY_LABELS.map((d, i) => (
+          <span key={i} className={`py-1 text-[10px] font-extrabold ${i >= 5 ? 'text-red-300' : 'text-slate-400'}`}>{d}</span>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`b${i}`} />;
+          const s = summary[d];
+          const fp = firing(d);
+          const isSel = d === selDay;
+          const isToday = d === today;
+          const overdue = s && s.pending > 0 && d < today;
+          const tone = !s ? '' :
+            overdue ? 'bg-red-50' :
+            s.pending > 0 ? 'bg-amber-50' :
+            'bg-brand-soft/60';
+          return (
+            <button
+              key={d}
+              onClick={() => setSelDay(d)}
+              className={`flex h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg transition ${
+                tone || 'hover:bg-slate-50'
+              } ${isSel ? 'ring-2 ring-brand' : isToday ? 'ring-1 ring-slate-300' : ''}`}
+            >
+              <span className={`text-[12px] font-bold ${overdue ? 'text-red-600' : s?.pending ? 'text-amber-600' : s ? 'text-brand' : 'text-slate-600'}`}>
+                {Number(d.slice(8))}
+              </span>
+              {s ? (
+                <span className="text-[8.5px] font-extrabold leading-none text-slate-500">{s.total}</span>
+              ) : fp.length > 0 ? (
+                <span className="flex gap-0.5">
+                  {fp.slice(0, 3).map((p) => (
+                    <span key={p.id} className={`h-1.5 w-1.5 rounded-full ${p.role === 'staff' ? 'bg-sky-400' : 'bg-violet-400'}`} />
+                  ))}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] font-bold text-slate-400">
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-brand" />All done</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />Pending</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-400" />Overdue</span>
+        <span className="ml-2"><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />Teacher plan</span>
+        <span><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-400" />Staff plan</span>
+      </div>
+
+      {/* Day breakdown */}
+      <div className="mt-4 border-t border-slate-100 pt-3.5">
+        <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+          {new Date(`${selDay}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+        </p>
+        {daySum ? (
+          <p className="mb-2.5 text-[12.5px] font-semibold text-slate-600">
+            <b>{daySum.total}</b> task{daySum.total === 1 ? '' : 's'} assigned ·{' '}
+            <span className="text-brand">{daySum.completed} completed</span> ·{' '}
+            <span className={selDay < today && daySum.pending ? 'text-red-500' : 'text-amber-600'}>
+              {daySum.pending} {selDay < today ? 'overdue' : 'pending'}
+            </span>
+          </p>
+        ) : (
+          <p className="mb-2.5 text-[12px] text-slate-400">No tasks assigned for this day yet.</p>
+        )}
+
+        {dayPlans.length > 0 ? (
+          <div className="space-y-1.5">
+            {dayPlans.map((plan) => (
+              <div key={plan.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                <i className="fas fa-rotate text-[11px] text-brand" />
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>{plan.role}</span>
+                <span className="text-[12px] font-bold text-slate-700">
+                  {REPEATS.find((r) => r.key === plan.repeat)?.label || plan.repeat}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  {planTaskLabel(plan)} → {plan.user_ids?.length ? `${plan.user_ids.length} users` : `all ${plan.role === 'staff' ? 'staff' : 'teachers'}`} ({roleUserCount(plan)})
+                </span>
+                <span className="ml-auto flex gap-1">
+                  <button onClick={() => onEditPlan(plan)} title="Edit" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-white hover:text-brand">
+                    <i className="fas fa-pen text-[10.5px]" />
+                  </button>
+                  <button onClick={() => onTogglePlan(plan)} title="Pause / resume" className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-white hover:text-amber-500">
+                    <i className={`fas ${plan.active ? 'fa-pause' : 'fa-play'} text-[10.5px]`} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-slate-400">
+            No recurring plans fire on this day{selDay >= today ? ' — tasks can still be assigned once from the Assign tab.' : '.'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============ Edit / reschedule a recurring plan ============ */
+
+function PlanEditDialog({ plan, onClose, onSaved }) {
+  const [repeat, setRepeat] = useState(plan.repeat);
+  const [weekdays, setWeekdays] = useState(new Set((plan.weekdays || []).map(Number)));
+  const [startDate, setStartDate] = useState(plan.start_date);
+  const [endDate, setEndDate] = useState(plan.end_date);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (repeat === 'custom' && weekdays.size === 0) {
+      toast.error('Pick at least one weekday');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/api/task-schedules/${plan.id}`, {
+        repeat,
+        weekdays: repeat === 'custom' ? [...weekdays] : [],
+        start_date: startDate,
+        end_date: endDate,
+      });
+      toast.success('Plan updated');
+      onSaved();
+    } catch (e) {
+      toast.error(e.message || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-[15px] font-extrabold text-slate-800">
+            Edit plan
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>{plan.role}</span>
+          </p>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+            <i className="fas fa-xmark" />
+          </button>
+        </div>
+
+        <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Repeat</p>
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {REPEATS.filter((r) => r.key !== 'once').map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setRepeat(r.key)}
+              className={`rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition ${
+                repeat === r.key ? 'border-brand bg-brand text-white' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        {repeat === 'custom' && (
+          <div className="mb-3">
+            <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">On these days</p>
+            <div className="flex gap-1">
+              {WEEKDAY_LABELS.map((label, i) => {
+                const on = weekdays.has(i);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setWeekdays((prev) => {
+                      const nextSel = new Set(prev);
+                      if (nextSel.has(i)) nextSel.delete(i);
+                      else nextSel.add(i);
+                      return nextSel;
+                    })}
+                    className={`h-9 w-10 rounded-lg text-[11px] font-extrabold transition ${
+                      on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mb-1.5 flex gap-3">
+          <div className="flex-1">
+            <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">From</p>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:border-brand" />
+          </div>
+          <div className="flex-1">
+            <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">To</p>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:border-brand" />
+          </div>
+        </div>
+        <p className="mb-4 text-[11px] text-slate-400">
+          To change the tasks or people, delete this plan and create a new one from the Assign tab.
+        </p>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-[13px] font-bold text-slate-500 hover:bg-slate-50">
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving || !startDate || !endDate || endDate < startDate}
+            className="rounded-xl bg-brand px-6 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
