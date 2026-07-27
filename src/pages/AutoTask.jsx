@@ -854,12 +854,11 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
     }
     setSaving(true);
     try {
-      await api.patch(`/api/task-schedules/${plan.id}`, {
-        repeat,
-        weekdays: repeat === 'custom' ? [...weekdays] : [],
-        start_date: startDate,
-        end_date: endDate,
-      });
+      const body = { repeat, start_date: startDate, end_date: endDate };
+      // The weekdays column arrives with migration 012 — only send it
+      // when the custom mode actually needs it.
+      if (repeat === 'custom') body.weekdays = [...weekdays];
+      await api.patch(`/api/task-schedules/${plan.id}`, body);
       toast.success('Plan updated');
       onSaved();
     } catch (e) {
