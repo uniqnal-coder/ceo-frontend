@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { validateForm, getValidationError } from '../utils/validation'
 import { toast } from '../utils/toast'
 import { api, toArray } from '../api/client'
@@ -157,6 +158,15 @@ export default function Staff() {
                   </td>
                   <td>
                     <div style={styles.actionsRow}>
+                      {member.user_id && (
+                        <Link
+                          to={`/attendance?user=${member.user_id}`}
+                          style={styles.editBtn}
+                          title="Check-in / selfie / location"
+                        >
+                          <i className="fas fa-location-dot" />
+                        </Link>
+                      )}
                       <button
                         onClick={() => handleEdit(member)}
                         style={styles.editBtn}

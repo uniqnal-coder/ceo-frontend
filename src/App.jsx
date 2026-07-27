@@ -12,6 +12,7 @@ import Biometry from './pages/Biometry';
 import Evaluations from './pages/Evaluations';
 import Announcements from './pages/Announcements';
 import TodayBoard from './pages/TodayBoard';
+import Attendance from './pages/Attendance';
 import DailyReportsFeed from './pages/DailyReportsFeed';
 import Settings from './pages/Settings';
 
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/biometry" element={<Biometry />} />
           <Route path="/evaluations" element={<Evaluations />} />
           <Route path="/today" element={<TodayBoard />} />
+          <Route path="/attendance" element={<Attendance />} />
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/daily-reports" element={<DailyReportsFeed />} />
           <Route path="/settings" element={<Settings />} />

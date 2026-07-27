@@ -217,10 +217,15 @@ export default function AutoTask() {
           user_ids: [...selectedUsers],
           titles,
           dates,
+          group_title: activeRole
+            ? `${activeRole.charAt(0).toUpperCase()}${activeRole.slice(1)} checklist`
+            : 'Assigned tasks',
         });
+        const items = r.subtasks || r.created || 0;
         toast.success(
-          `Assigned ${r.created} task${r.created === 1 ? '' : 's'} across ${r.users} user${r.users === 1 ? '' : 's'}` +
-          (r.skipped ? ` (${r.skipped} duplicate${r.skipped === 1 ? '' : 's'} skipped)` : '')
+          `Assigned ${items} task${items === 1 ? '' : 's'} as ${r.created || 1} checklist` +
+          ` across ${r.users} user${r.users === 1 ? '' : 's'}` +
+          (r.skippedCompleted ? ` (${r.skippedCompleted} already completed skipped)` : '')
         );
       } else {
         const everyone = people.filter((p) => p.role === activeRole)

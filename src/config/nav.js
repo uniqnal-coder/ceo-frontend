@@ -7,6 +7,7 @@ export const navGroups = [
     items: [
       { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
       { to: '/today', label: "Today's Board", short: 'Today', icon: 'fa-calendar-day' },
+      { to: '/attendance', label: 'Check-in & Location', short: 'Check-in', icon: 'fa-location-dot' },
     ],
   },
   {
@@ -19,7 +20,7 @@ export const navGroups = [
   {
     title: 'Operations',
     items: [
-      { to: '/biometry', label: 'Staff Attendance', short: 'Biometry', icon: 'fa-fingerprint' },
+      { to: '/biometry', label: 'Fingerprints', short: 'Biometry', icon: 'fa-fingerprint' },
       { to: '/tasks', label: 'Task', short: 'Task', icon: 'fa-clipboard-check' },
       { to: '/auto-task', label: 'Auto Task', short: 'Auto', icon: 'fa-wand-magic-sparkles' },
       { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },

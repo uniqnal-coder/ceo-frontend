@@ -114,10 +114,10 @@ export default function Home() {
 
         <Card
           className="xl:col-span-4"
-          icon="fa-video"
+          icon="fa-location-dot"
           iconColor="text-kpi-blue"
-          title="Staff Attendance (Camera & Biometry)"
-          action={<CardLink to="/biometry" label="View All" />}
+          title="Check-in, Selfie & Location"
+          action={<CardLink to="/attendance" label="View All" />}
         >
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 
 const LATE_AFTER = 8 * 60 + 30 // 08:30
@@ -144,7 +145,14 @@ export default function TodayBoard() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-50">
-                  <td className="px-4 py-2.5 font-semibold text-slate-700">{r.name}</td>
+                  <td className="px-4 py-2.5 font-semibold text-slate-700">
+                    <Link
+                      to={`/attendance?user=${r.id}&date=${date}`}
+                      className="hover:text-brand hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                  </td>
                   <td className="px-2 py-2.5">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase ${
