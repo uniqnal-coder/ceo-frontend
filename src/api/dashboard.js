@@ -14,6 +14,7 @@ const settle = (result, fallback) => (result.status === 'fulfilled' ? result.val
 export async function fetchDashboard() {
   const [
     staff,
+    roleTasks,
     checkins,
     notifications,
     salary,
@@ -21,6 +22,7 @@ export async function fetchDashboard() {
     health,
   ] = await Promise.allSettled([
     api.get('/api/staff?page=1&limit=500'),
+    api.get('/api/role-tasks'),
     api.get(`/api/checkins/overview?date=${todayISO()}`),
     api.get('/api/notifications'),
     api.get('/api/salary?page=1&limit=200'),
@@ -33,6 +35,7 @@ export async function fetchDashboard() {
   return {
     staff: toArray(staffRes ?? []),
     staffTotal: staffRes?.pagination?.total ?? toArray(staffRes ?? []).length,
+    roleTasks: settle(roleTasks, { teacher: [], staff: [] }),
     checkinsToday: settle(checkins, { checkins: [], people: [] }),
     notifications: toArray(settle(notifications, [])),
     salary: toArray(settle(salary, null) ?? []),

@@ -466,25 +466,15 @@ function TeacherPasswordDialog({ account, onDone }) {
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
           <i className="fas fa-key" />
         </div>
-        <h2 className="text-[16px] font-bold text-slate-800">App login created</h2>
+        <h2 className="text-[16px] font-bold text-slate-800">Teacher app login created</h2>
         <p className="mt-1 text-[12.5px] text-slate-500">
-          Credentials were emailed to the staff member when SMTP is configured.
-          This password is shown <b>only once</b> — they set their own on first login.
+          Give these to the teacher. This password is shown <b>only once</b> —
+          they will set their own on first login in the HRNAL app.
         </p>
-        {account.emailSent === true && (
-          <p className="mt-2 rounded-lg bg-brand-soft px-3 py-2 text-[12px] font-medium text-brand">
-            Email sent to {account.email}
-          </p>
-        )}
-        {account.emailSent === false && (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700">
-            Email not sent (SMTP not configured or failed). Copy the password below and share it manually.
-          </p>
-        )}
 
         <div className="mt-4 space-y-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email / username</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</p>
             <p className="select-all text-[13.5px] font-semibold text-slate-700">{account.email}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">

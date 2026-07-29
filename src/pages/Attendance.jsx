@@ -122,10 +122,10 @@ export default function Attendance() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to="/reports/daily"
+            to="/today"
             className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50"
           >
-            Daily Report
+            Today&apos;s Board
           </Link>
           <input
             type="date"
