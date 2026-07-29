@@ -12,9 +12,6 @@ import Skeleton from '../components/ui/Skeleton'
 const money = (n) => `$${Number(n || 0).toLocaleString()}`
 const pctOf = (part, total) => (total ? Math.round((part / total) * 1000) / 10 : null)
 
-
-
-
 const NOTIF_ICON = {
   attendance: { icon: 'fa-user-check', color: 'bg-brand-soft text-brand' },
   fee: { icon: 'fa-coins', color: 'bg-amber-100 text-amber-600' },
@@ -76,7 +73,6 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5 lg:p-6">
-      {/* ---- KPI row ---- */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard color="bg-kpi-blue" icon="fa-users" label="Total Staff" value={data.staffTotal.toLocaleString()}
           delta={{ text: 'Across all departments', up: true }} />
@@ -88,10 +84,14 @@ export default function Home() {
           delta={presentPct !== null ? { text: `${presentPct}% checked in`, up: true } : { text: 'No punches yet', muted: true }} />
       </div>
 
-      {/* ---- Row 2: attendance · camera & biometry · notifications ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-5" icon="fa-chart-pie" iconColor="text-brand" title="Check-ins Today (Verified)"
-          action={<CardLink to="/today" label="Today's Board" />}>
+        <Card
+          className="xl:col-span-5"
+          icon="fa-chart-pie"
+          iconColor="text-brand"
+          title="Check-ins Today (Verified)"
+          action={<CardLink to="/attendance" label="Check-in & Location" />}
+        >
           <div className="flex items-center justify-center gap-6">
             <Donut pct={presentPct} />
             <ul className="space-y-2.5">
@@ -114,43 +114,6 @@ export default function Home() {
 
         <Card
           className="xl:col-span-4"
-          icon="fa-location-dot"
-          iconColor="text-kpi-blue"
-          title="Check-in, Selfie & Location"
-          action={<CardLink to="/attendance" label="View All" />}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Today's Records</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <MiniStat label="Present" value={ci.present} tone="text-brand" />
-                <MiniStat label="Absent" value={ci.notIn} tone="text-danger" />
-                <MiniStat label="Late" value={ci.late} tone="text-amber-500" />
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Biometry Devices</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <MiniStat label="Active" value={biometryActive ?? '—'} tone="text-brand" />
-                <MiniStat label="Total" value={biometryTotal ?? '—'} tone="text-slate-700" />
-                <MiniStat label="Offline" value={biometryTotal === null ? '—' : biometryTotal - biometryActive} tone="text-danger" />
-              </div>
-            </div>
-          </div>
-          <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Monitor</p>
-          <div className="grid grid-cols-5 gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <div key={n} className="flex aspect-video flex-col items-center justify-center rounded-lg bg-slate-800 text-slate-500">
-                <i className="fas fa-video-slash text-[11px]" />
-                <span className="mt-1 text-[8px]">Cam {n}</span>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] text-slate-400">CCTV feed not connected yet</p>
-        </Card>
-
-        <Card
-          className="xl:col-span-3"
           icon="fa-bell"
           iconColor="text-amber-500"
           title="Auto Notifications"
@@ -168,7 +131,7 @@ export default function Home() {
             <Empty text="No notifications yet" />
           ) : (
             <ul className="divide-y divide-slate-50">
-              {notifs.slice(0, 5).map((n) => {
+              {notifs.slice(0, 6).map((n) => {
                 const s = notifStyle(n.type)
                 return (
                   <li key={n.id} className="flex items-start gap-2.5 py-2.5">
@@ -188,76 +151,12 @@ export default function Home() {
             </ul>
           )}
         </Card>
-      </div>
-
-      {/* ---- Row 3: task division · auto reports · rewards & faults ---- */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card
-          className="xl:col-span-5"
-          icon="fa-list-check"
-          iconColor="text-kpi-blue"
-          title="Role Task Lists"
-          action={<CardLink to="/tasks" label="Manage Tasks" />}
-        >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {[
-              ['teacher', 'Teacher Tasks', 'fa-person-chalkboard', 'text-kpi-sky'],
-              ['staff', 'Staff Tasks', 'fa-user-tie', 'text-kpi-purple'],
-            ].map(([key, label, icon, color]) => {
-              const list = data.roleTasks?.[key] || []
-              return (
-                <div key={key} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
-                  <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    <i className={`fas ${icon} ${color}`} /> {label}
-                    <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate-500">{list.length}</span>
-                  </p>
-                  {list.length === 0 ? (
-                    <p className="py-2 text-[11.5px] text-slate-300">No tasks defined yet</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {list.slice(0, 4).map((t, i) => (
-                        <li key={t.id} className="flex items-center gap-2 text-[12.5px] text-slate-600">
-                          <span className="text-[10px] font-extrabold text-slate-300">{i + 1}.</span>
-                          <span className="truncate">{t.title}</span>
-                        </li>
-                      ))}
-                      {list.length > 4 && (
-                        <li className="text-[11px] text-slate-400">+{list.length - 4} more…</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <p className="mt-3 border-t border-slate-100 pt-2.5 text-[11px] text-slate-400">
-            The standard task list every teacher and staff member follows — edit it in the Task section.
-          </p>
-        </Card>
-
-        <Card
-          className="xl:col-span-4"
-          icon="fa-file-lines"
-          iconColor="text-indigo-500"
-          title="Auto Reports (All)"
-          action={<CardLink to="/evaluations" label="View All Reports" />}
-        >
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            <ReportTile to="/daily-reports" icon="fa-calendar-day" color="bg-blue-50 text-kpi-blue" title="Daily Report" />
-            <ReportTile to="/tasks" icon="fa-calendar-week" color="bg-brand-soft text-brand" title="Weekly Report" />
-            <ReportTile to="/evaluations" icon="fa-calendar" color="bg-violet-50 text-kpi-purple" title="Monthly Report" />
-            <ReportTile to="/today" icon="fa-user-check" color="bg-amber-50 text-kpi-gold" title="Attendance Report" />
-            <ReportTile to="/evaluations" icon="fa-chart-line" color="bg-pink-50 text-kpi-pink" title="Performance Report" />
-            <ReportTile to="/staff" icon="fa-umbrella-beach" color="bg-emerald-50 text-success" title="Leave Report" />
-          </div>
-        </Card>
 
         <Card
           className="xl:col-span-3"
           icon="fa-award"
           iconColor="text-kpi-gold"
           title="Rewards & Faults (Auto)"
-          action={<CardLink to="/salary" label="View All" />}
         >
           {data.salaryDenied ? (
             <Empty text="Admin access required" />
@@ -270,9 +169,8 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* ---- Row 4: monitoring · quick actions · system status ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-5" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
+        <Card className="xl:col-span-8" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             <MonitorTile icon="fa-video" color="text-kpi-blue" label="Cameras Active" value="0/5" sub="Not connected" />
             <MonitorTile
@@ -288,33 +186,20 @@ export default function Home() {
           </div>
         </Card>
 
-        <Card className="xl:col-span-4" icon="fa-bolt" iconColor="text-brand" title="Quick Actions">
-          <div className="grid grid-cols-3 gap-2">
-            <ActionTile to="/staff" icon="fa-user-tie" label="Add Staff" />
-            <ActionTile to="/tasks" icon="fa-list-check" label="Assign Task" />
-            <ActionTile to="/today" icon="fa-calendar-day" label="Today's Board" />
-            <ActionTile to="/announcements" icon="fa-bullhorn" label="Announce" />
-            <ActionTile to="/salary" icon="fa-award" label="Add Reward" />
-            <ActionTile to="/salary" icon="fa-gavel" label="Add Fault" />
+        <Card className="xl:col-span-4" icon="fa-chart-column" iconColor="text-indigo-500" title="Period Reports">
+          <p className="mb-3 text-[12px] text-slate-500">
+            Names, unfinished work, delays, and faults — auto-built from check-ins and tasks.
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            <ReportLink to="/reports/daily" icon="fa-calendar-day" label="Daily Report" hint="Today’s board" />
+            <ReportLink to="/reports/weekly" icon="fa-calendar-week" label="Weekly Report" hint="This week" />
+            <ReportLink to="/reports/monthly" icon="fa-calendar" label="Monthly Report" hint="This month" />
           </div>
-        </Card>
-
-        <Card className="xl:col-span-3" icon="fa-server" iconColor="text-slate-500" title="System Status">
-          <ul className="space-y-2.5 text-[12px]">
-            <StatusRow label="Database" ok={dbOnline} okText="Online" badText="Down" />
-            <StatusRow label="Server" ok={healthy} okText="Online" badText="Unreachable" />
-            <StatusRow label="Security" ok={healthy} okText="Active" badText="Check" />
-            <StatusRow label="Notifications" ok okText="Active" />
-            <StatusRow label="Environment" okText={data.health?.environment || '—'} neutral />
-            <StatusRow label="Version" okText={data.health?.version || '—'} neutral />
-          </ul>
         </Card>
       </div>
     </div>
   )
 }
-
-/* ================= building blocks ================= */
 
 function Card({ icon, iconColor = 'text-kpi-blue', title, action, className = '', children }) {
   return (
@@ -395,7 +280,6 @@ function LegendRow({ dot, label, value, extra }) {
   )
 }
 
-
 function MiniStat({ label, value, tone }) {
   return (
     <div className="rounded-lg bg-slate-50 px-1.5 py-2.5 text-center">
@@ -405,20 +289,20 @@ function MiniStat({ label, value, tone }) {
   )
 }
 
-
-function ReportTile({ to, icon, color, title }) {
+function ReportLink({ to, icon, label, hint }) {
   return (
     <Link
       to={to}
-      className="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3 transition hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-sm"
+      className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3 transition hover:-translate-y-0.5 hover:border-brand/30 hover:bg-brand-soft/30"
     >
-      <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm ${color}`}>
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-sm text-brand shadow-sm">
         <i className={`fas ${icon}`} />
       </span>
-      <span>
-        <span className="block text-[12px] font-bold leading-tight text-slate-700">{title}</span>
-        <span className="text-[9.5px] text-slate-400">Auto Generated</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-bold text-slate-700">{label}</span>
+        <span className="text-[11px] text-slate-400">{hint}</span>
       </span>
+      <i className="fas fa-chevron-right text-[10px] text-slate-300" />
     </Link>
   )
 }
@@ -462,48 +346,10 @@ function MonitorTile({ icon, color, label, value, sub, good, bad }) {
   )
 }
 
-
-function ActionTile({ to, icon, label }) {
-  return (
-    <Link
-      to={to}
-      className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-center transition hover:-translate-y-0.5 hover:border-brand/40 hover:bg-brand-soft/40"
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-[13px] text-brand">
-        <i className={`fas ${icon}`} />
-      </span>
-      <span className="text-[9.5px] font-semibold leading-tight text-slate-600">{label}</span>
-    </Link>
-  )
-}
-
-function StatusRow({ label, ok, okText, badText, neutral }) {
-  return (
-    <li className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-2 text-slate-500">
-        <span className={`h-1.5 w-1.5 rounded-full ${neutral ? 'bg-slate-300' : ok ? 'bg-brand' : 'bg-danger'}`} />
-        {label}
-      </span>
-      {neutral ? (
-        <span className="font-semibold capitalize text-slate-700">{okText}</span>
-      ) : (
-        <span className={`font-semibold ${ok ? 'text-brand' : 'text-danger'}`}>{ok ? okText : badText}</span>
-      )}
-    </li>
-  )
-}
-
-
-
-function Empty({ text, cta }) {
+function Empty({ text }) {
   return (
     <div className="py-6 text-center text-[12px] text-slate-400">
       <p>{text}</p>
-      {cta && (
-        <Link to={cta.to} className="mt-1 inline-block font-medium text-brand hover:underline">
-          {cta.label}
-        </Link>
-      )}
     </div>
   )
 }
@@ -521,8 +367,8 @@ function DashboardSkeleton() {
           <Skeleton key={i} className="h-56 rounded-2xl" />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {[...Array(3)].map((_, i) => (
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {[...Array(2)].map((_, i) => (
           <Skeleton key={i} className="h-56 rounded-2xl" />
         ))}
       </div>
