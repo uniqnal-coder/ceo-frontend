@@ -88,10 +88,10 @@ export default function Home() {
           delta={presentPct !== null ? { text: `${presentPct}% checked in`, up: true } : { text: 'No punches yet', muted: true }} />
       </div>
 
-      {/* ---- Row 2: attendance · camera & biometry · notifications ---- */}
+      {/* ---- Row 2: attendance · notifications ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-5" icon="fa-chart-pie" iconColor="text-brand" title="Check-ins Today (Verified)"
-          action={<CardLink to="/today" label="Today's Board" />}>
+        <Card className="xl:col-span-7" icon="fa-chart-pie" iconColor="text-brand" title="Check-ins Today (Verified)"
+          action={<CardLink to="/attendance" label="Check-in & Location" />}>
           <div className="flex items-center justify-center gap-6">
             <Donut pct={presentPct} />
             <ul className="space-y-2.5">
@@ -113,44 +113,7 @@ export default function Home() {
         </Card>
 
         <Card
-          className="xl:col-span-4"
-          icon="fa-location-dot"
-          iconColor="text-kpi-blue"
-          title="Check-in, Selfie & Location"
-          action={<CardLink to="/attendance" label="View All" />}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Today's Records</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <MiniStat label="Present" value={ci.present} tone="text-brand" />
-                <MiniStat label="Absent" value={ci.notIn} tone="text-danger" />
-                <MiniStat label="Late" value={ci.late} tone="text-amber-500" />
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Biometry Devices</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                <MiniStat label="Active" value={biometryActive ?? '—'} tone="text-brand" />
-                <MiniStat label="Total" value={biometryTotal ?? '—'} tone="text-slate-700" />
-                <MiniStat label="Offline" value={biometryTotal === null ? '—' : biometryTotal - biometryActive} tone="text-danger" />
-              </div>
-            </div>
-          </div>
-          <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Monitor</p>
-          <div className="grid grid-cols-5 gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <div key={n} className="flex aspect-video flex-col items-center justify-center rounded-lg bg-slate-800 text-slate-500">
-                <i className="fas fa-video-slash text-[11px]" />
-                <span className="mt-1 text-[8px]">Cam {n}</span>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] text-slate-400">CCTV feed not connected yet</p>
-        </Card>
-
-        <Card
-          className="xl:col-span-3"
+          className="xl:col-span-5"
           icon="fa-bell"
           iconColor="text-amber-500"
           title="Auto Notifications"
@@ -190,70 +153,10 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* ---- Row 3: task division · auto reports · rewards & faults ---- */}
+      {/* ---- Row 3: rewards & faults · monitoring ---- */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <Card
-          className="xl:col-span-5"
-          icon="fa-list-check"
-          iconColor="text-kpi-blue"
-          title="Role Task Lists"
-          action={<CardLink to="/tasks" label="Manage Tasks" />}
-        >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {[
-              ['teacher', 'Teacher Tasks', 'fa-person-chalkboard', 'text-kpi-sky'],
-              ['staff', 'Staff Tasks', 'fa-user-tie', 'text-kpi-purple'],
-            ].map(([key, label, icon, color]) => {
-              const list = data.roleTasks?.[key] || []
-              return (
-                <div key={key} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3.5">
-                  <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    <i className={`fas ${icon} ${color}`} /> {label}
-                    <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold text-slate-500">{list.length}</span>
-                  </p>
-                  {list.length === 0 ? (
-                    <p className="py-2 text-[11.5px] text-slate-300">No tasks defined yet</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {list.slice(0, 4).map((t, i) => (
-                        <li key={t.id} className="flex items-center gap-2 text-[12.5px] text-slate-600">
-                          <span className="text-[10px] font-extrabold text-slate-300">{i + 1}.</span>
-                          <span className="truncate">{t.title}</span>
-                        </li>
-                      ))}
-                      {list.length > 4 && (
-                        <li className="text-[11px] text-slate-400">+{list.length - 4} more…</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <p className="mt-3 border-t border-slate-100 pt-2.5 text-[11px] text-slate-400">
-            The standard task list every teacher and staff member follows — edit it in the Task section.
-          </p>
-        </Card>
-
-        <Card
           className="xl:col-span-4"
-          icon="fa-file-lines"
-          iconColor="text-indigo-500"
-          title="Auto Reports (All)"
-          action={<CardLink to="/evaluations" label="View All Reports" />}
-        >
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            <ReportTile to="/daily-reports" icon="fa-calendar-day" color="bg-blue-50 text-kpi-blue" title="Daily Report" />
-            <ReportTile to="/tasks" icon="fa-calendar-week" color="bg-brand-soft text-brand" title="Weekly Report" />
-            <ReportTile to="/evaluations" icon="fa-calendar" color="bg-violet-50 text-kpi-purple" title="Monthly Report" />
-            <ReportTile to="/today" icon="fa-user-check" color="bg-amber-50 text-kpi-gold" title="Attendance Report" />
-            <ReportTile to="/evaluations" icon="fa-chart-line" color="bg-pink-50 text-kpi-pink" title="Performance Report" />
-            <ReportTile to="/staff" icon="fa-umbrella-beach" color="bg-emerald-50 text-success" title="Leave Report" />
-          </div>
-        </Card>
-
-        <Card
-          className="xl:col-span-3"
           icon="fa-award"
           iconColor="text-kpi-gold"
           title="Rewards & Faults (Auto)"
@@ -268,11 +171,8 @@ export default function Home() {
             </div>
           )}
         </Card>
-      </div>
 
-      {/* ---- Row 4: monitoring · quick actions · system status ---- */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-5" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
+        <Card className="xl:col-span-8" icon="fa-gauge-high" iconColor="text-cyan-600" title="Daily Monitoring (Live Overview)">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             <MonitorTile icon="fa-video" color="text-kpi-blue" label="Cameras Active" value="0/5" sub="Not connected" />
             <MonitorTile
@@ -286,28 +186,6 @@ export default function Home() {
             <MonitorTile icon="fa-heart-pulse" color="text-rose-500" label="System Health" value={healthy ? 'Excellent' : 'Degraded'} sub={healthy ? `${uptimeH}h uptime` : 'Unreachable'} good={healthy} bad={!healthy} />
             <MonitorTile icon="fa-database" color="text-teal-500" label="Database" value={dbOnline ? 'Online' : 'Down'} sub="Supabase" good={dbOnline} bad={!dbOnline} />
           </div>
-        </Card>
-
-        <Card className="xl:col-span-4" icon="fa-bolt" iconColor="text-brand" title="Quick Actions">
-          <div className="grid grid-cols-3 gap-2">
-            <ActionTile to="/staff" icon="fa-user-tie" label="Add Staff" />
-            <ActionTile to="/tasks" icon="fa-list-check" label="Assign Task" />
-            <ActionTile to="/today" icon="fa-calendar-day" label="Today's Board" />
-            <ActionTile to="/announcements" icon="fa-bullhorn" label="Announce" />
-            <ActionTile to="/salary" icon="fa-award" label="Add Reward" />
-            <ActionTile to="/salary" icon="fa-gavel" label="Add Fault" />
-          </div>
-        </Card>
-
-        <Card className="xl:col-span-3" icon="fa-server" iconColor="text-slate-500" title="System Status">
-          <ul className="space-y-2.5 text-[12px]">
-            <StatusRow label="Database" ok={dbOnline} okText="Online" badText="Down" />
-            <StatusRow label="Server" ok={healthy} okText="Online" badText="Unreachable" />
-            <StatusRow label="Security" ok={healthy} okText="Active" badText="Check" />
-            <StatusRow label="Notifications" ok okText="Active" />
-            <StatusRow label="Environment" okText={data.health?.environment || '—'} neutral />
-            <StatusRow label="Version" okText={data.health?.version || '—'} neutral />
-          </ul>
         </Card>
       </div>
     </div>
@@ -405,24 +283,6 @@ function MiniStat({ label, value, tone }) {
   )
 }
 
-
-function ReportTile({ to, icon, color, title }) {
-  return (
-    <Link
-      to={to}
-      className="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3 transition hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-sm"
-    >
-      <span className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm ${color}`}>
-        <i className={`fas ${icon}`} />
-      </span>
-      <span>
-        <span className="block text-[12px] font-bold leading-tight text-slate-700">{title}</span>
-        <span className="text-[9.5px] text-slate-400">Auto Generated</span>
-      </span>
-    </Link>
-  )
-}
-
 function RfList({ title, items, tone, sign, fallbackName }) {
   return (
     <div>
@@ -461,38 +321,6 @@ function MonitorTile({ icon, color, label, value, sub, good, bad }) {
     </div>
   )
 }
-
-
-function ActionTile({ to, icon, label }) {
-  return (
-    <Link
-      to={to}
-      className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-center transition hover:-translate-y-0.5 hover:border-brand/40 hover:bg-brand-soft/40"
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-[13px] text-brand">
-        <i className={`fas ${icon}`} />
-      </span>
-      <span className="text-[9.5px] font-semibold leading-tight text-slate-600">{label}</span>
-    </Link>
-  )
-}
-
-function StatusRow({ label, ok, okText, badText, neutral }) {
-  return (
-    <li className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-2 text-slate-500">
-        <span className={`h-1.5 w-1.5 rounded-full ${neutral ? 'bg-slate-300' : ok ? 'bg-brand' : 'bg-danger'}`} />
-        {label}
-      </span>
-      {neutral ? (
-        <span className="font-semibold capitalize text-slate-700">{okText}</span>
-      ) : (
-        <span className={`font-semibold ${ok ? 'text-brand' : 'text-danger'}`}>{ok ? okText : badText}</span>
-      )}
-    </li>
-  )
-}
-
 
 
 function Empty({ text, cta }) {

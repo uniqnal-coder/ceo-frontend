@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 
 const LATE_AFTER = 8 * 60 + 30 // 08:30
@@ -121,12 +121,6 @@ export default function Attendance() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/today"
-            className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50"
-          >
-            Today&apos;s Board
-          </Link>
           <input
             type="date"
             value={date}

@@ -252,13 +252,23 @@ function StaffForm({ staff, onClose }) {
         onClose()
       } else {
         const created = await api.post('/api/staff', formData)
-        toast.success('Staff member added successfully')
         if (created?.account?.tempPassword) {
+          if (created.account.emailSent) {
+            toast.success('Staff added — login email sent')
+          } else {
+            toast.error(
+              created.account.emailError
+                ? `Staff saved but email failed: ${created.account.emailError}`
+                : 'Staff saved but login email was not sent'
+            )
+          }
           setAccount(created.account)
           return
         }
-        if (created?.account?.error) {
-          toast.error(`Staff saved but app login failed: ${created.account.error}`)
+        if (created?.account?.existing) {
+          toast.success('Staff linked to an existing app login')
+        } else {
+          toast.success('Staff member added successfully')
         }
         onClose()
       }
@@ -311,12 +321,13 @@ function StaffForm({ staff, onClose }) {
 
           <div style={styles.formRow}>
             <div style={styles.formGroup}>
-              <label>Email {staff ? '' : '(creates app login)'}</label>
+              <label>Email {!staff && '* (login credentials are emailed here)'}</label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={e => setFormData({...formData, email: e.target.value})}
                 placeholder="person@school.com"
+                required={!staff}
                 style={styles.input}
               />
             </div>
@@ -464,17 +475,29 @@ function TeacherPasswordDialog({ account, onDone }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-brand-soft text-brand">
-          <i className="fas fa-key" />
+          <i className="fas fa-envelope" />
         </div>
-        <h2 className="text-[16px] font-bold text-slate-800">Teacher app login created</h2>
+        <h2 className="text-[16px] font-bold text-slate-800">App login created</h2>
         <p className="mt-1 text-[12.5px] text-slate-500">
-          Give these to the teacher. This password is shown <b>only once</b> —
-          they will set their own on first login in the HRNAL app.
+          Login email and temporary password were sent to the staff member when SMTP is configured.
+          This password is shown <b>only once</b> — they set their own on first login.
         </p>
+        {account.emailSent === true && (
+          <p className="mt-2 rounded-lg bg-brand-soft px-3 py-2 text-[12px] font-medium text-brand">
+            Email sent to {account.email}
+          </p>
+        )}
+        {account.emailSent === false && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700">
+            Email not sent
+            {account.emailError ? `: ${account.emailError}` : ' (SMTP not configured or failed)'}.
+            Copy the password below and share it manually.
+          </p>
+        )}
 
         <div className="mt-4 space-y-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email / username</p>
             <p className="select-all text-[13.5px] font-semibold text-slate-700">{account.email}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">

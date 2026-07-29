@@ -9,11 +9,9 @@ import AutoTask from './pages/AutoTask';
 import Feedback from './pages/Feedback';
 import Salary from './pages/Salary';
 import Biometry from './pages/Biometry';
-import Evaluations from './pages/Evaluations';
 import Announcements from './pages/Announcements';
-import TodayBoard from './pages/TodayBoard';
 import Attendance from './pages/Attendance';
-import DailyReportsFeed from './pages/DailyReportsFeed';
+import PeriodReports from './pages/PeriodReports';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -30,11 +28,13 @@ export default function App() {
           <Route path="/feedback" element={<Feedback />} />
           <Route path="/salary" element={<Salary />} />
           <Route path="/biometry" element={<Biometry />} />
-          <Route path="/evaluations" element={<Evaluations />} />
-          <Route path="/today" element={<TodayBoard />} />
+          <Route path="/evaluations" element={<Navigate to="/reports" replace />} />
+          <Route path="/today" element={<Navigate to="/attendance" replace />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/announcements" element={<Announcements />} />
-          <Route path="/daily-reports" element={<DailyReportsFeed />} />
+          <Route path="/daily-reports" element={<Navigate to="/reports" replace />} />
+          <Route path="/reports" element={<PeriodReports />} />
+          <Route path="/reports/:period" element={<Navigate to="/reports" replace />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>

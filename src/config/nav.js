@@ -6,25 +6,22 @@ export const navGroups = [
     title: 'Overview',
     items: [
       { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
-      { to: '/today', label: "Today's Board", short: 'Today', icon: 'fa-calendar-day' },
       { to: '/attendance', label: 'Check-in & Location', short: 'Check-in', icon: 'fa-location-dot' },
+      { to: '/reports', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
     ],
   },
   {
-    title: 'Management',
+    title: 'HR Management',
     items: [
-      { to: '/staff', label: 'HR Management', short: 'Staff', icon: 'fa-people-group' },
-      { to: '/salary', label: 'Rewards & Faults', short: 'Salary', icon: 'fa-trophy' },
+      { to: '/staff', label: 'Add Staff', short: 'Staff', icon: 'fa-user-plus' },
+      { to: '/tasks', label: 'Add Task', short: 'Tasks', icon: 'fa-clipboard-check' },
+      { to: '/auto-task', label: 'Assign Task', short: 'Assign', icon: 'fa-wand-magic-sparkles' },
     ],
   },
   {
     title: 'Operations',
     items: [
       { to: '/biometry', label: 'Fingerprints', short: 'Biometry', icon: 'fa-fingerprint' },
-      { to: '/tasks', label: 'Task', short: 'Task', icon: 'fa-clipboard-check' },
-      { to: '/auto-task', label: 'Auto Task', short: 'Auto', icon: 'fa-wand-magic-sparkles' },
-      { to: '/evaluations', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
-      { to: '/daily-reports', label: 'Daily Reports', short: 'Reports Feed', icon: 'fa-file-lines' },
     ],
   },
   {
@@ -43,5 +40,6 @@ export const navGroups = [
 export const navItems = navGroups.flatMap((g) => g.items)
 
 export function findActiveItem(pathname) {
-  return navItems.find((i) => (i.end ? pathname === i.to : pathname.startsWith(i.to)))
+  const matches = navItems.filter((i) => (i.end ? pathname === i.to : pathname.startsWith(i.to)))
+  return matches.sort((a, b) => b.to.length - a.to.length)[0]
 }
