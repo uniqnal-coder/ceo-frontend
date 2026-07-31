@@ -31,14 +31,20 @@ export default function Staff() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this staff member?')) return
-    
+    if (
+      !confirm(
+        'Move this staff member to Archive? They will not be able to log in or appear on attendance until restored.'
+      )
+    ) {
+      return
+    }
+
     try {
       await api.del(`/api/staff/${id}`)
-      toast.success('Staff member deleted successfully')
+      toast.success('Moved to Archive')
       fetchStaff()
     } catch (err) {
-      toast.error('Failed to delete: ' + err.message)
+      toast.error('Failed to archive: ' + err.message)
     }
   }
 
@@ -69,19 +75,36 @@ export default function Staff() {
     <div style={styles.container}>
       <div style={styles.header} className="page-header">
         <div>
-          <h2>👥 Staff Management</h2>
+          <h2 className="flex items-center gap-2 text-[20px] font-extrabold text-slate-800">
+            <i className="fas fa-user-plus text-brand" />
+            Add Staff
+          </h2>
           <p style={styles.subtitle} className="page-subtitle">View all users and add new staff members</p>
         </div>
-        <button onClick={() => setShowForm(true)} style={styles.addButton} className="add-button">
-          ➕ Add Staff Member
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/archive"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            <i className="fas fa-box-archive" />
+            Archive
+          </Link>
+          <button
+            onClick={() => setShowForm(true)}
+            style={styles.addButton}
+            className="add-button inline-flex items-center gap-2"
+          >
+            <i className="fas fa-plus" />
+            Add Staff Member
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2 px-1">
         {[
           ['all', 'Everyone'],
-          ['teacher', '👩‍🏫 Teachers'],
-          ['staff', '🧑‍💼 Staff'],
+          ['teacher', 'Teachers'],
+          ['staff', 'Staff'],
           ['none', 'No app login'],
         ].map(([key, label]) => (
           <button
@@ -104,7 +127,12 @@ export default function Staff() {
       {!loading && visibleStaff.length === 0 && !error && (
         <div style={styles.empty} className="empty-state">
           <p>📋 No staff members found</p>
-          <button onClick={() => setShowForm(true)} style={styles.emptyButton}>
+          <button
+            onClick={() => setShowForm(true)}
+            style={styles.emptyButton}
+            className="inline-flex items-center gap-2"
+          >
+            <i className="fas fa-plus" />
             Add First Staff Member
           </button>
         </div>
@@ -131,14 +159,16 @@ export default function Staff() {
               {visibleStaff.map(member => (
                 <tr key={member.id}>
                   <td style={styles.nameCell}>{member.name}</td>
-                  <td>{member.age || '-'}</td>
-                  <td>{member.role || '-'}</td>
-                  <td>{member.department || '-'}</td>
-                  <td style={styles.salaryCell}>
-                    {member.salary ? `$${Number(member.salary).toLocaleString()}` : '-'}
+                  <td>{member.age ?? <EmptyCell />}</td>
+                  <td>{member.role || <EmptyCell />}</td>
+                  <td>{member.department || <EmptyCell />}</td>
+                  <td style={member.salary != null && member.salary !== '' ? styles.salaryCell : undefined}>
+                    {member.salary != null && member.salary !== ''
+                      ? `$${Number(member.salary).toLocaleString()}`
+                      : <EmptyCell />}
                   </td>
-                  <td>{member.phone || '-'}</td>
-                  <td>{member.certificate || '-'}</td>
+                  <td>{member.phone || <EmptyCell />}</td>
+                  <td>{member.certificate || <EmptyCell />}</td>
                   <td>
                     {appRoleOf(member) === 'teacher' ? (
                       <span className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher app</span>
@@ -193,7 +223,17 @@ export default function Staff() {
   )
 }
 
+const FALLBACK_ROLES = [
+  'Teacher',
+  'Professor',
+  'Lecturer',
+  'Assistant Professor',
+  'Admin',
+  'Coordinator',
+]
+
 function StaffForm({ staff, onClose }) {
+  const [roleOptions, setRoleOptions] = useState(FALLBACK_ROLES)
   const [formData, setFormData] = useState({
     name: staff?.name || '',
     age: staff?.age || '',
@@ -210,6 +250,26 @@ function StaffForm({ staff, onClose }) {
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
   const [account, setAccount] = useState(null)
+
+  useEffect(() => {
+    let live = true
+    api
+      .get('/api/hr-roles?active=1')
+      .then((data) => {
+        if (!live) return
+        const names = (data.roles || []).map((r) => r.name).filter(Boolean)
+        if (!names.length) return
+        setRoleOptions(names)
+        setFormData((prev) => {
+          if (names.includes(prev.role)) return prev
+          return { ...prev, role: names[0] }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
 
   const validateField = (field, value) => {
     const error = getValidationError(field, value)
@@ -346,18 +406,23 @@ function StaffForm({ staff, onClose }) {
 
           <div style={styles.formRow}>
             <div style={styles.formGroup}>
-              <label>Role</label>
+              <label>
+                Role{' '}
+                <Link to="/roles" style={{ fontSize: 11, fontWeight: 600, color: '#0d9488' }}>
+                  Manage roles
+                </Link>
+              </label>
               <select
                 value={formData.role}
                 onChange={e => setFormData({...formData, role: e.target.value})}
                 style={styles.input}
               >
-                <option>Teacher</option>
-                <option>Professor</option>
-                <option>Lecturer</option>
-                <option>Assistant Professor</option>
-                <option>Admin</option>
-                <option>Coordinator</option>
+                {!roleOptions.includes(formData.role) && formData.role && (
+                  <option value={formData.role}>{formData.role}</option>
+                )}
+                {roleOptions.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
               </select>
             </div>
             <div style={styles.formGroup}>
@@ -457,6 +522,10 @@ function StaffForm({ staff, onClose }) {
       </div>
     </div>
   )
+}
+
+function EmptyCell() {
+  return <span className="text-slate-300">—</span>
 }
 
 function TeacherPasswordDialog({ account, onDone }) {

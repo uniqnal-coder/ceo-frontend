@@ -4,6 +4,8 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import Staff from './pages/Staff';
+import Roles from './pages/Roles';
+import Archive from './pages/Archive';
 import Tasks from './pages/Tasks';
 import AutoTask from './pages/AutoTask';
 import Feedback from './pages/Feedback';
@@ -12,6 +14,7 @@ import Biometry from './pages/Biometry';
 import Announcements from './pages/Announcements';
 import Attendance from './pages/Attendance';
 import PeriodReports from './pages/PeriodReports';
+import TasksTracking from './pages/TasksTracking';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -23,6 +26,8 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/staff" element={<Staff />} />
+          <Route path="/roles" element={<Roles />} />
+          <Route path="/archive" element={<Archive />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/auto-task" element={<AutoTask />} />
           <Route path="/feedback" element={<Feedback />} />
@@ -35,6 +40,7 @@ export default function App() {
           <Route path="/daily-reports" element={<Navigate to="/reports" replace />} />
           <Route path="/reports" element={<PeriodReports />} />
           <Route path="/reports/:period" element={<Navigate to="/reports" replace />} />
+          <Route path="/tasks-tracking" element={<TasksTracking />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>

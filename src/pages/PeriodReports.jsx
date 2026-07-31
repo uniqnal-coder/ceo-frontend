@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import Skeleton from '../components/ui/Skeleton'
 
 const PERIODS = {
-  daily: { label: 'Daily', hint: 'Names, unfinished tasks, delays & faults for one day' },
-  weekly: { label: 'Weekly', hint: 'Monday–Sunday rollup of attendance, tasks, and faults' },
-  monthly: { label: 'Monthly', hint: 'Full-month performance: completion, delays, faults' },
+  daily: { label: 'Daily', hint: 'Tap a person to see their day — progress, pending & overdue' },
+  weekly: { label: 'Weekly', hint: 'Monday–Sunday rollup per person for the selected week' },
+  monthly: { label: 'Monthly', hint: 'Full-month progress per person for the selected month' },
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -23,10 +23,31 @@ function fmtTime(iso) {
 
 function fmtDay(iso) {
   if (!iso) return '—'
-  return new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('en-GB', {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) {
+    return new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+    })
+  }
+  const day = d.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
+    timeZone: 'Asia/Baghdad',
   })
+  const hasTime = String(iso).length > 10
+  if (!hasTime) return day
+  const time = d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Baghdad',
+  })
+  return `${day} · ${time}`
+}
+
+function periodLabel(period, from, to) {
+  if (period === 'daily') return fmtDay(from)
+  return `${fmtDay(from)} → ${fmtDay(to)}`
 }
 
 export default function PeriodReports() {
@@ -38,18 +59,22 @@ export default function PeriodReports() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('attendance')
+  const [tab, setTab] = useState('people')
+  const [selectedId, setSelectedId] = useState(null)
+  const [search, setSearch] = useState('')
 
   const setPeriod = (next) => {
     const q = new URLSearchParams(params)
     q.set('period', next)
     setParams(q)
+    setSelectedId(null)
   }
 
   useEffect(() => {
     let live = true
     setLoading(true)
     setError('')
+    setSelectedId(null)
     api
       .get(`/api/reports/period?period=${period}&date=${date}`)
       .then((d) => {
@@ -69,12 +94,25 @@ export default function PeriodReports() {
   }, [period, date])
 
   const s = data?.summary
+  const selected = useMemo(
+    () => (data?.people || []).find((p) => p.id === selectedId) || null,
+    [data, selectedId]
+  )
+
+  const people = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return (data?.people || []).filter((p) => {
+      if (!q) return true
+      return p.name.toLowerCase().includes(q) || String(p.role || '').includes(q)
+    })
+  }, [data, search])
 
   const tabs = useMemo(
     () => [
+      { key: 'people', label: 'People', count: data?.people?.length },
       { key: 'attendance', label: 'Attendance', count: data?.attendance?.total },
       { key: 'unfinished', label: 'Unfinished', count: data?.unfinished_tasks?.length },
-      { key: 'delayed', label: 'Delays', count: data?.delayed_tasks?.length },
+      { key: 'delayed', label: 'Overdue', count: data?.delayed_tasks?.length },
       { key: 'faults', label: 'Faults', count: data?.faults?.length },
     ],
     [data]
@@ -88,7 +126,7 @@ export default function PeriodReports() {
           <p className="text-[13px] text-slate-500">{meta.hint}</p>
           {data && (
             <p className="mt-1 text-[12px] font-medium text-slate-400">
-              {data.from === data.to ? fmtDay(data.from) : `${fmtDay(data.from)} → ${fmtDay(data.to)}`}
+              {periodLabel(period, data.from, data.to)}
             </p>
           )}
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -134,9 +172,9 @@ export default function PeriodReports() {
         <>
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat tone="text-brand" label="Present" value={s.attendance_present} sub={`of ${s.staff_total} staff`} />
-            <Stat tone="text-amber-500" label="Late / delays" value={s.tasks_delayed} sub={`${s.attendance_late} late punches`} />
-            <Stat tone="text-kpi-blue" label="Unfinished tasks" value={s.tasks_unfinished} sub={`${s.completion_rate ?? '—'}% done`} />
-            <Stat tone="text-danger" label="Faults" value={s.faults_count} sub={fmtMoney(s.faults_total)} />
+            <Stat tone="text-amber-500" label="Pending tasks" value={s.tasks_pending ?? s.tasks_unfinished} sub="before deadline" />
+            <Stat tone="text-danger" label="Overdue" value={s.tasks_delayed} sub={`${s.completion_rate ?? '—'}% done overall`} />
+            <Stat tone="text-kpi-blue" label="Faults" value={s.faults_count} sub={fmtMoney(s.faults_total)} />
           </div>
 
           <div className="mb-4 flex flex-wrap gap-1.5 border-b border-slate-100 pb-3">
@@ -144,7 +182,10 @@ export default function PeriodReports() {
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTab(t.key)}
+                onClick={() => {
+                  setTab(t.key)
+                  if (t.key !== 'people') setSelectedId(null)
+                }}
                 className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition ${
                   tab === t.key
                     ? 'bg-slate-800 text-white'
@@ -161,11 +202,244 @@ export default function PeriodReports() {
             ))}
           </div>
 
+          {tab === 'people' && (
+            <div className={`grid gap-4 ${selected ? 'lg:grid-cols-[1fr_1.15fr]' : ''}`}>
+              <div>
+                <div className="mb-3 relative">
+                  <i className="fas fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-300" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search people…"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:border-brand"
+                  />
+                </div>
+                <PeopleList
+                  people={people}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  period={period}
+                />
+              </div>
+              {selected && (
+                <PersonDetail
+                  person={selected}
+                  period={period}
+                  rangeLabel={periodLabel(period, data.from, data.to)}
+                  onClose={() => setSelectedId(null)}
+                />
+              )}
+            </div>
+          )}
           {tab === 'attendance' && <AttendanceTable people={data.attendance.people} period={period} />}
           {tab === 'unfinished' && <TaskTable rows={data.unfinished_tasks} empty="No unfinished tasks in this period." />}
-          {tab === 'delayed' && <TaskTable rows={data.delayed_tasks} empty="No delayed tasks — great work." highlight />}
+          {tab === 'delayed' && <TaskTable rows={data.delayed_tasks} empty="No overdue tasks — great work." highlight />}
           {tab === 'faults' && <FaultsTable faults={data.faults} rewards={data.rewards} />}
         </>
+      )}
+    </div>
+  )
+}
+
+function PeopleList({ people, selectedId, onSelect, period }) {
+  if (!people?.length) return <Empty text="No staff for this period." />
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <ul className="divide-y divide-slate-50">
+        {people.map((p) => {
+          const g = p.progress || {}
+          const active = selectedId === p.id
+          return (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(active ? null : p.id)}
+                className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition ${
+                  active ? 'bg-brand-soft/50' : 'hover:bg-slate-50/80'
+                }`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[13px] font-extrabold text-slate-600">
+                  {(p.name || '?').slice(0, 1).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-[14px] font-extrabold text-slate-800">{p.name}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+                      {p.role}
+                    </span>
+                    {p.attendance && <StatusPill status={p.attendance.status} />}
+                  </div>
+                  <p className="mt-0.5 text-[12px] text-slate-400">
+                    {g.total
+                      ? `${g.percent}% · ${g.completed} done · ${g.pending} pending · ${g.overdue} overdue`
+                      : 'No tasks in this period'}
+                    {period !== 'daily' && p.attendance
+                      ? ` · ${p.attendance.days_present || 0}d present`
+                      : ''}
+                  </p>
+                </div>
+                <div className="hidden shrink-0 text-right sm:block">
+                  <p className="text-[16px] font-extrabold text-brand">{g.percent ?? 0}%</p>
+                  <p className="text-[10px] font-semibold text-slate-400">progress</p>
+                </div>
+                <i className={`fas fa-chevron-right text-[11px] ${active ? 'text-brand' : 'text-slate-300'}`} />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function PersonDetail({ person, period, rangeLabel, onClose }) {
+  const g = person.progress || {}
+  const pct = g.percent || 0
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-4">
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[16px] font-extrabold text-slate-800">{person.name}</p>
+          <p className="text-[12px] capitalize text-slate-400">
+            {person.role} · {rangeLabel}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-50 hover:text-slate-500"
+        >
+          <i className="fas fa-xmark" />
+        </button>
+      </div>
+
+      {/* Overall progress — inspired by mobile card */}
+      <div className="rounded-2xl bg-brand px-4 py-4 text-white shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[13px] font-bold">Overall Progress</p>
+          <p className="text-[18px] font-extrabold">{pct}%</p>
+        </div>
+        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/25">
+          <div
+            className="h-full rounded-full bg-white transition-all"
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
+        <div className="mt-2.5 flex justify-between text-[12px] font-semibold text-white/90">
+          <span>
+            {g.completed || 0} of {g.total || 0} completed
+          </span>
+          <span>{g.remaining || 0} remaining</span>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <MiniStat
+          icon="fa-circle-check"
+          tone="text-emerald-600"
+          soft="bg-emerald-50 border-emerald-100"
+          value={g.completed || 0}
+          label="Completed"
+        />
+        <MiniStat
+          icon="fa-ellipsis"
+          tone="text-amber-600"
+          soft="bg-amber-50 border-amber-100"
+          value={g.pending || 0}
+          label="Pending"
+        />
+        <MiniStat
+          icon="fa-clock"
+          tone="text-red-500"
+          soft="bg-red-50 border-red-100"
+          value={g.overdue || 0}
+          label="Overdue"
+        />
+        <MiniStat
+          icon="fa-list-check"
+          tone="text-sky-600"
+          soft="bg-sky-50 border-sky-100"
+          value={g.total || 0}
+          label="Total Tasks"
+        />
+      </div>
+
+      {person.attendance && (
+        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-3">
+          <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+            Attendance
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+            <StatusPill status={person.attendance.status} />
+            {period === 'daily' ? (
+              <span className="text-slate-500">
+                In {fmtTime(person.attendance.check_in_time)} · Out {fmtTime(person.attendance.check_out_time)}
+              </span>
+            ) : (
+              <span className="text-slate-500">
+                {person.attendance.days_present} present · {person.attendance.days_late} late ·{' '}
+                {person.attendance.days_absent} absent
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <TaskSection title="Overdue" rows={person.tasks?.overdue} empty="None overdue" danger />
+      <TaskSection title="Pending" rows={person.tasks?.pending} empty="None pending" />
+      <TaskSection title="Completed" rows={person.tasks?.completed} empty="None completed" done />
+
+      {(person.faults?.length > 0 || person.rewards?.length > 0) && (
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+          <div className="rounded-xl bg-red-50 px-3 py-2">
+            <p className="font-bold text-danger">Faults</p>
+            <p className="text-[15px] font-extrabold text-danger">−{fmtMoney(person.faults_total)}</p>
+          </div>
+          <div className="rounded-xl bg-brand-soft px-3 py-2">
+            <p className="font-bold text-brand">Rewards</p>
+            <p className="text-[15px] font-extrabold text-brand">+{fmtMoney(person.rewards_total)}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MiniStat({ icon, tone, soft, value, label }) {
+  return (
+    <div className={`rounded-2xl border px-3 py-3 ${soft}`}>
+      <span className={`mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/80 ${tone}`}>
+        <i className={`fas ${icon} text-[13px]`} />
+      </span>
+      <p className={`text-[22px] font-extrabold leading-6 ${tone}`}>{value}</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">{label}</p>
+    </div>
+  )
+}
+
+function TaskSection({ title, rows, empty, danger, done }) {
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">{title}</p>
+      {!rows?.length ? (
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-400">{empty}</p>
+      ) : (
+        <ul className="max-h-40 space-y-1 overflow-y-auto">
+          {rows.map((t) => (
+            <li
+              key={t.id}
+              className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[12.5px] ${
+                danger ? 'border-red-100 bg-red-50/40' : done ? 'border-slate-100 bg-slate-50/50' : 'border-slate-100'
+              }`}
+            >
+              <span className={`min-w-0 truncate font-semibold ${done ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                {t.title}
+              </span>
+              <span className="shrink-0 text-[11px] text-slate-400">{fmtDay(t.due_at)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
@@ -210,11 +484,7 @@ function AttendanceTable({ people, period }) {
         <tbody className="divide-y divide-slate-50">
           {people.map((p) => (
             <tr key={p.id} className="hover:bg-slate-50/60">
-              <td className="px-4 py-2.5 font-semibold text-slate-700">
-                <Link to={`/attendance?user=${p.id}`} className="hover:text-brand hover:underline">
-                  {p.name}
-                </Link>
-              </td>
+              <td className="px-4 py-2.5 font-semibold text-slate-700">{p.name}</td>
               <td className="px-3 py-2.5 capitalize text-slate-500">{p.role}</td>
               <td className="px-3 py-2.5">
                 <StatusPill status={p.status} />
@@ -263,10 +533,10 @@ function TaskTable({ rows, empty, highlight }) {
               <td className="px-3 py-2.5 text-slate-500">{fmtDay(t.due_at)}</td>
               <td className="px-3 py-2.5">
                 {t.overdue ? (
-                  <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-danger">Delayed</span>
+                  <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-danger">Overdue</span>
                 ) : (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold capitalize text-slate-500">
-                    {t.status}
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-600">
+                    Pending
                   </span>
                 )}
               </td>

@@ -6,6 +6,36 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearEndISO = () => `${new Date().getFullYear()}-12-31`;
 const HISTORY_PAGE = 25;
 
+/** Format HH:mm (24h) for display, e.g. 09:00 → 9:00 AM */
+const formatHHMM = (hhmm) => {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return hhmm || '—';
+  let h = Number(m[1]);
+  const min = m[2];
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${min} ${ap}`;
+};
+
+const formatTaskTime = (iso) => {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'Asia/Baghdad',
+    });
+  } catch {
+    return '';
+  }
+};
+
+const isPastDue = (dueAt) => {
+  if (!dueAt) return false;
+  const t = new Date(dueAt).getTime();
+  return Number.isFinite(t) && t < Date.now();
+};
+
 const ROLE_BADGE = {
   teacher: 'bg-violet-50 text-violet-600',
   staff: 'bg-sky-50 text-sky-600',
@@ -13,10 +43,10 @@ const ROLE_BADGE = {
 
 const REPEATS = [
   { key: 'once', label: 'Once' },
-  { key: 'daily', label: 'Daily (working days)' },
+  { key: 'daily', label: 'Daily' },
   { key: 'weekly', label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
-  { key: 'custom', label: 'Custom days' },
+  { key: 'custom', label: 'Custom' },
 ];
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -84,6 +114,8 @@ export default function AutoTask() {
   const [dueDate, setDueDate] = useState(todayISO());
   const [fromDate, setFromDate] = useState(todayISO());
   const [toDate, setToDate] = useState(yearEndISO());
+  const [startTime, setStartTime] = useState('09:00');
+  const [dueTime, setDueTime] = useState('17:00');
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState(null);
   const [editPlan, setEditPlan] = useState(null);
@@ -191,7 +223,8 @@ export default function AutoTask() {
   const recurring = repeat !== 'once';
   const usingList = recurring && followList;
   const taskCount = usingList ? roleTasks.length : selected.size;
-  const canSave = selectedUsers.size > 0 && taskCount > 0 &&
+  const timesOk = startTime && dueTime && startTime < dueTime;
+  const canSave = selectedUsers.size > 0 && taskCount > 0 && timesOk &&
     (repeat === 'custom' ? weekdaysSel.size > 0 : true) &&
     (recurring ? fromDate && toDate && toDate >= fromDate : !!dueDate);
 
@@ -205,6 +238,8 @@ export default function AutoTask() {
     setDueDate(todayISO());
     setFromDate(todayISO());
     setToDate(yearEndISO());
+    setStartTime('09:00');
+    setDueTime('17:00');
   };
 
   const save = async () => {
@@ -217,6 +252,8 @@ export default function AutoTask() {
           user_ids: [...selectedUsers],
           titles,
           dates,
+          start_time: startTime,
+          due_time: dueTime,
           group_title: activeRole
             ? `${activeRole.charAt(0).toUpperCase()}${activeRole.slice(1)} checklist`
             : 'Assigned tasks',
@@ -238,6 +275,8 @@ export default function AutoTask() {
           weekdays: repeat === 'custom' ? [...weekdaysSel] : [],
           start_date: fromDate,
           end_date: toDate,
+          start_time: startTime,
+          due_time: dueTime,
         });
         toast.success(
           `Recurring plan created — tasks generate automatically` +
@@ -450,15 +489,17 @@ export default function AutoTask() {
         {/* Step 3 — schedule + save */}
         {activeRole && roleTasks.length > 0 && (
           <div className="mt-5 border-t border-slate-100 pt-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Step 3 · Schedule — one day, or a plan that runs by itself
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Step 3 · Schedule
             </p>
-            <div className="mb-2 flex flex-wrap gap-1.5">
+
+            <div className="mb-3 flex flex-wrap gap-1.5">
               {REPEATS.map((r) => (
                 <button
                   key={r.key}
+                  type="button"
                   onClick={() => setRepeat(r.key)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition ${
+                  className={`rounded-lg border px-3 py-1.5 text-[12px] font-bold transition ${
                     repeat === r.key
                       ? 'border-brand bg-brand text-white'
                       : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
@@ -469,87 +510,99 @@ export default function AutoTask() {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {!recurring ? (
-                <div>
-                  <p className="mb-1 text-[10.5px] font-semibold text-slate-400">Due date</p>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-slate-400">Date</span>
                   <input
                     type="date"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
                   />
-                </div>
+                </label>
               ) : (
                 <>
-                  <div>
-                    <p className="mb-1 text-[10.5px] font-semibold text-slate-400">From</p>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">From</span>
                     <input
                       type="date"
                       value={fromDate}
                       onChange={(e) => setFromDate(e.target.value)}
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
                     />
-                  </div>
-                  <div>
-                    <p className="mb-1 text-[10.5px] font-semibold text-slate-400">To</p>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">To</span>
                     <input
                       type="date"
                       value={toDate}
                       onChange={(e) => setToDate(e.target.value)}
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
                     />
-                  </div>
-                  {repeat === 'custom' && (
-                    <div className="pb-1">
-                      <p className="mb-1 text-[10.5px] font-semibold text-slate-400">On these days</p>
-                      <div className="flex gap-1">
-                        {WEEKDAY_LABELS.map((label, i) => {
-                          const on = weekdaysSel.has(i);
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => setWeekdaysSel((prev) => {
-                                const nextSel = new Set(prev);
-                                if (nextSel.has(i)) nextSel.delete(i);
-                                else nextSel.add(i);
-                                return nextSel;
-                              })}
-                              className={`h-9 w-10 rounded-lg text-[11px] font-extrabold transition ${
-                                on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  <p className="pb-2.5 text-[11px] text-slate-400">
-                    {repeat === 'daily' && 'Every working day (Fri & Sat skipped)'}
-                    {repeat === 'weekly' && 'Every week on the “From” weekday'}
-                    {repeat === 'monthly' && 'Every month on the “From” day'}
-                    {repeat === 'custom' && `Every ${[...weekdaysSel].sort().map((i) => WEEKDAY_LABELS[i]).join(', ') || '—'}`}
-                    {' · ~'}{dates.length} day{dates.length === 1 ? '' : 's'}
-                  </p>
+                  </label>
                 </>
               )}
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-slate-400">Start</span>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-slate-400">Deadline</span>
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className={`h-10 w-full rounded-xl border px-3 text-[13.5px] outline-none focus:border-brand ${
+                    timesOk ? 'border-slate-200' : 'border-red-300'
+                  }`}
+                />
+              </label>
             </div>
 
-            <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-50 pt-3">
-              <p className="text-[12.5px] font-bold text-slate-500">
-                {selectedUsers.size} user{selectedUsers.size === 1 ? '' : 's'} · {usingList ? `role list (${roleTasks.length})` : `${selected.size} task${selected.size === 1 ? '' : 's'}`}
-                {recurring
-                  ? <span className="text-slate-400"> · generated automatically each {repeat === 'daily' ? 'working day' : repeat.replace('ly', '')}</span>
-                  : <span className="text-slate-400"> = {selectedUsers.size * selected.size} assignment{selectedUsers.size * selected.size === 1 ? '' : 's'}</span>}
+            {repeat === 'custom' && (
+              <div className="mt-3 flex flex-wrap gap-1">
+                {WEEKDAY_LABELS.map((label, i) => {
+                  const on = weekdaysSel.has(i);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setWeekdaysSel((prev) => {
+                        const nextSel = new Set(prev);
+                        if (nextSel.has(i)) nextSel.delete(i);
+                        else nextSel.add(i);
+                        return nextSel;
+                      })}
+                      className={`h-8 w-10 rounded-lg text-[11px] font-extrabold transition ${
+                        on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[12px] text-slate-400">
+                {selectedUsers.size} people · {usingList ? roleTasks.length : selected.size} tasks
+                {recurring ? ` · ${dates.length} days` : ''}
+                {!timesOk ? ' · deadline must be after start' : ''}
               </p>
               <button
+                type="button"
                 onClick={save}
                 disabled={saving || !canSave}
                 className="rounded-xl bg-brand px-6 py-2.5 text-[13.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
-                {saving ? 'Saving…' : recurring ? 'Create Recurring Plan' : 'Save & Assign'}
+                {saving ? 'Saving…' : recurring ? 'Create plan' : 'Assign'}
               </button>
             </div>
           </div>
@@ -577,6 +630,9 @@ export default function AutoTask() {
                   {plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list (auto)'}
                   {' · '}
                   {plan.start_date} → {plan.end_date}
+                  {(plan.start_time || plan.due_time) && (
+                    <> · {formatHHMM(plan.start_time || '09:00')}–{formatHHMM(plan.due_time || '17:00')}</>
+                  )}
                 </span>
                 <span className="ml-auto flex items-center gap-1.5">
                   <button
@@ -643,7 +699,9 @@ export default function AutoTask() {
                       </td>
                       <td className="max-w-[260px] truncate px-2 py-2 text-slate-600">{t.title}</td>
                       <td className="whitespace-nowrap px-2 py-2 text-slate-500">
-                        {t.due_at ? new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+                        {t.due_at
+                          ? `${new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${formatTaskTime(t.due_at)}`
+                          : '—'}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-slate-500">
                         {t.created_at ? new Date(t.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
@@ -850,16 +908,29 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
   const [weekdays, setWeekdays] = useState(new Set((plan.weekdays || []).map(Number)));
   const [startDate, setStartDate] = useState(plan.start_date);
   const [endDate, setEndDate] = useState(plan.end_date);
+  const [startTime, setStartTime] = useState(plan.start_time || '09:00');
+  const [dueTime, setDueTime] = useState(plan.due_time || '17:00');
   const [saving, setSaving] = useState(false);
+  const timesOk = startTime && dueTime && startTime < dueTime;
 
   const save = async () => {
     if (repeat === 'custom' && weekdays.size === 0) {
       toast.error('Pick at least one weekday');
       return;
     }
+    if (!timesOk) {
+      toast.error('Deadline must be after start time');
+      return;
+    }
     setSaving(true);
     try {
-      const body = { repeat, start_date: startDate, end_date: endDate };
+      const body = {
+        repeat,
+        start_date: startDate,
+        end_date: endDate,
+        start_time: startTime,
+        due_time: dueTime,
+      };
       // The weekdays column arrives with migration 012 — only send it
       // when the custom mode actually needs it.
       if (repeat === 'custom') body.weekdays = [...weekdays];
@@ -928,7 +999,7 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="mb-1.5 flex gap-3">
+        <div className="mb-3 flex gap-3">
           <div className="flex-1">
             <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">From</p>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
@@ -940,7 +1011,20 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
               className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:border-brand" />
           </div>
         </div>
+        <div className="mb-1.5 flex gap-3">
+          <div className="flex-1">
+            <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Start time</p>
+            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:border-brand" />
+          </div>
+          <div className="flex-1">
+            <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Deadline</p>
+            <input type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:border-brand" />
+          </div>
+        </div>
         <p className="mb-4 text-[11px] text-slate-400">
+          {formatHHMM(startTime)} → {formatHHMM(dueTime)}. Past deadline counts as unfinished for fault tracking.
           To change the tasks or people, delete this plan and create a new one from the Assign tab.
         </p>
 
@@ -950,7 +1034,7 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
           </button>
           <button
             onClick={save}
-            disabled={saving || !startDate || !endDate || endDate < startDate}
+            disabled={saving || !startDate || !endDate || endDate < startDate || !timesOk}
             className="rounded-xl bg-brand px-6 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Save Changes'}
@@ -978,7 +1062,7 @@ function UserDetailDialog({ person, onClose }) {
   const today = todayISO();
   const dayOf = (t) => String(t.due_at || t.created_at || '').slice(0, 10);
   const bucketOf = (t) =>
-    t.status === 'completed' ? 'done' : dayOf(t) < today ? 'overdue' : 'pending';
+    t.status === 'completed' ? 'done' : isPastDue(t.due_at) ? 'overdue' : 'pending';
 
   const stats = useMemo(() => {
     const s = { total: 0, done: 0, pending: 0, overdue: 0 };
@@ -1130,6 +1214,11 @@ function UserDetailDialog({ person, onClose }) {
                         } text-[14px]`} />
                         <span className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${b === 'done' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
                           {t.title}
+                          {t.due_at && (
+                            <span className="ml-1.5 text-[11px] font-semibold text-slate-400">
+                              {t.start_at ? `${formatTaskTime(t.start_at)}–` : ''}{formatTaskTime(t.due_at)}
+                            </span>
+                          )}
                         </span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
                           b === 'done' ? 'bg-brand-soft text-brand' :

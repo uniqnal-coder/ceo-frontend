@@ -7,13 +7,21 @@ export const navGroups = [
     items: [
       { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
       { to: '/attendance', label: 'Check-in & Location', short: 'Check-in', icon: 'fa-location-dot' },
+    ],
+  },
+  {
+    title: 'Reports',
+    items: [
       { to: '/reports', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
+      { to: '/tasks-tracking', label: 'Tasks Tracking', short: 'Tracking', icon: 'fa-list-check' },
     ],
   },
   {
     title: 'HR Management',
     items: [
       { to: '/staff', label: 'Add Staff', short: 'Staff', icon: 'fa-user-plus' },
+      { to: '/roles', label: 'Roles', short: 'Roles', icon: 'fa-user-tag' },
+      { to: '/archive', label: 'Archive', short: 'Archive', icon: 'fa-box-archive' },
       { to: '/tasks', label: 'Add Task', short: 'Tasks', icon: 'fa-clipboard-check' },
       { to: '/auto-task', label: 'Assign Task', short: 'Assign', icon: 'fa-wand-magic-sparkles' },
     ],
