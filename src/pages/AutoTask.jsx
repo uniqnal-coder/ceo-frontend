@@ -220,6 +220,47 @@ export default function AutoTask() {
     () => computeDates(repeat, dueDate, fromDate, toDate, [...weekdaysSel]),
     [repeat, dueDate, fromDate, toDate, weekdaysSel]
   );
+
+  // Which of the selected people already have each task in this window?
+  // Lets the admin see duplicates before saving instead of after.
+  const [already, setAlready] = useState(new Map()); // title -> Set(user_id)
+  useEffect(() => {
+    if (selectedUsers.size === 0 || dates.length === 0) { setAlready(new Map()); return; }
+    let live = true;
+    const from = dates[0];
+    const to = dates[dates.length - 1];
+    api.get(`/api/staff-tasks/existing?user_ids=${[...selectedUsers].join(',')}&from=${from}&to=${to}`)
+      .then((rows) => {
+        if (!live) return;
+        const map = new Map();
+        for (const r of toArray(rows)) {
+          if (!map.has(r.title)) map.set(r.title, new Set());
+          map.get(r.title).add(r.user_id);
+        }
+        setAlready(map);
+      })
+      .catch(() => { if (live) setAlready(new Map()); });
+    return () => { live = false; };
+  }, [selectedUsers, dates]);
+
+  // A task is fully covered when every selected person already has it.
+  const coverageOf = (title) => {
+    const who = already.get(title);
+    if (!who) return 0;
+    let n = 0;
+    for (const id of selectedUsers) if (who.has(id)) n += 1;
+    return n;
+  };
+  // How many (user × task) pairs in this send are already assigned.
+  const dupeCount = useMemo(() => {
+    const titles = repeat !== 'once' && followList
+      ? roleTasks.map((t) => t.title)
+      : [...selected];
+    let n = 0;
+    for (const title of titles) n += coverageOf(title) * Math.max(dates.length, 1);
+    return n;
+  }, [already, selected, selectedUsers, roleTasks, repeat, followList, dates]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const recurring = repeat !== 'once';
   const usingList = recurring && followList;
   const taskCount = usingList ? roleTasks.length : selected.size;
@@ -465,18 +506,39 @@ export default function AutoTask() {
                 <div className="max-h-72 space-y-1.5 overflow-y-auto pr-0.5">
                   {visibleTasks.map((t) => {
                     const on = selected.has(t.title);
+                    const have = coverageOf(t.title);
+                    const allHave = have > 0 && have === selectedUsers.size;
                     return (
                       <button
                         key={t.id}
-                        onClick={() => toggleTask(t.title)}
+                        onClick={() => !allHave && toggleTask(t.title)}
+                        disabled={allHave}
+                        title={allHave ? 'Already assigned for these dates — no need to send again' : undefined}
                         className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition ${
-                          on ? 'border-brand bg-brand-soft/40' : 'border-slate-200 bg-white hover:bg-slate-50'
+                          allHave
+                            ? 'cursor-not-allowed border-slate-100 bg-slate-50'
+                            : on
+                              ? 'border-brand bg-brand-soft/40'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
                         }`}
                       >
-                        <i className={`fas ${on ? 'fa-square-check text-brand' : 'fa-square text-slate-200'} text-[17px]`} />
-                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-slate-700">
+                        <i className={`fas ${
+                          allHave ? 'fa-circle-check text-slate-300'
+                            : on ? 'fa-square-check text-brand'
+                            : 'fa-square text-slate-200'
+                        } text-[17px]`} />
+                        <span className={`min-w-0 flex-1 truncate text-[13.5px] font-semibold ${allHave ? 'text-slate-400' : 'text-slate-700'}`}>
                           {t.title}
                         </span>
+                        {have > 0 && (
+                          <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                            allHave ? 'bg-slate-200 text-slate-500' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {allHave
+                              ? 'Already sent'
+                              : `${have}/${selectedUsers.size} have it`}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -592,6 +654,11 @@ export default function AutoTask() {
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <p className="text-[12px] text-slate-400">
+                {dupeCount > 0 && (
+                  <span className="mr-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-extrabold text-amber-600">
+                    {dupeCount} already sent — skipped
+                  </span>
+                )}
                 {selectedUsers.size} people · {usingList ? roleTasks.length : selected.size} tasks
                 {recurring ? ` · ${dates.length} days` : ''}
                 {!timesOk ? ' · deadline must be after start' : ''}
