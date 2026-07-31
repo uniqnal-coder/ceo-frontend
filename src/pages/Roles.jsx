@@ -27,18 +27,19 @@ export default function Roles() {
   const [editId, setEditId] = useState(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('emerald')
+  const [busyId, setBusyId] = useState(null)
 
-  const load = async () => {
-    setLoading(true)
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     setError('')
     try {
       const data = await api.get('/api/hr-roles')
       setRoles(data.roles || [])
     } catch (err) {
       setError(err.message)
-      setRoles([])
+      if (!silent) setRoles([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -54,11 +55,11 @@ export default function Roles() {
     if (!trimmed || saving) return
     setSaving(true)
     try {
-      await api.post('/api/hr-roles', { name: trimmed, color })
+      const created = await api.post('/api/hr-roles', { name: trimmed, color })
       setName('')
       setColor('emerald')
+      setRoles((prev) => [...prev, { ...created, staff_count: created.staff_count || 0 }])
       toast.success('Role added')
-      await load()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -76,10 +77,19 @@ export default function Roles() {
     if (!editId) return
     setSaving(true)
     try {
-      await api.patch(`/api/hr-roles/${editId}`, { name: editName.trim(), color: editColor })
+      const updated = await api.patch(`/api/hr-roles/${editId}`, {
+        name: editName.trim(),
+        color: editColor,
+      })
+      setRoles((prev) =>
+        prev.map((r) =>
+          r.id === editId
+            ? { ...r, ...updated, staff_count: updated.staff_count ?? r.staff_count }
+            : r
+        )
+      )
       toast.success('Role updated')
       setEditId(null)
-      await load()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -88,22 +98,35 @@ export default function Roles() {
   }
 
   const toggleActive = async (role) => {
+    if (busyId) return
+    const next = role.active === false
+    const previous = role.active
+    // Flip UI immediately — don't wait for the network round-trip.
+    setRoles((prev) =>
+      prev.map((r) => (r.id === role.id ? { ...r, active: next } : r))
+    )
+    setBusyId(role.id)
     try {
-      await api.patch(`/api/hr-roles/${role.id}`, { active: !role.active })
-      toast.success(role.active ? 'Role hidden from Add Staff' : 'Role activated')
-      await load()
+      await api.patch(`/api/hr-roles/${role.id}`, { active: next })
     } catch (err) {
-      toast.error(err.message)
+      setRoles((prev) =>
+        prev.map((r) => (r.id === role.id ? { ...r, active: previous } : r))
+      )
+      toast.error(err.message || 'Could not update role')
+    } finally {
+      setBusyId(null)
     }
   }
 
   const remove = async (role) => {
     if (!confirm(`Delete role “${role.name}”?`)) return
+    const snapshot = roles
+    setRoles((prev) => prev.filter((r) => r.id !== role.id))
     try {
       await api.del(`/api/hr-roles/${role.id}`)
       toast.success('Role deleted')
-      await load()
     } catch (err) {
+      setRoles(snapshot)
       toast.error(err.message)
     }
   }
@@ -119,7 +142,7 @@ export default function Roles() {
             Roles
           </h2>
           <p className="mt-1 max-w-xl text-[13px] text-slate-500">
-            Create the job titles used when adding staff — Teacher, Coordinator, or any custom role your school needs.
+            Create job titles for Add Staff. Use Show / Hide to control which roles appear in the dropdown.
           </p>
         </div>
         <Link
@@ -202,11 +225,12 @@ export default function Roles() {
       <div className="grid gap-3 sm:grid-cols-2">
         {roles.map((role) => {
           const editing = editId === role.id
+          const visible = role.active !== false
           return (
             <div
               key={role.id}
               className={`rounded-2xl border bg-white p-4 shadow-sm transition ${
-                role.active === false ? 'border-slate-100 opacity-70' : 'border-slate-200'
+                visible ? 'border-slate-200' : 'border-dashed border-slate-200 bg-slate-50/60'
               }`}
             >
               {editing ? (
@@ -247,39 +271,43 @@ export default function Roles() {
                   </div>
                 </div>
               ) : (
-                <>
+                <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-extrabold ring-1 ring-inset ${chipOf(role.color)}`}
-                      >
-                        {role.name}
-                      </span>
-                      <p className="mt-2 text-[12px] text-slate-400">
-                        {role.staff_count || 0} staff
-                        {role.active === false ? ' · hidden' : ''}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-extrabold ring-1 ring-inset ${chipOf(role.color)} ${
+                            visible ? '' : 'opacity-60'
+                          }`}
+                        >
+                          {role.name}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase ${
+                            visible
+                              ? 'bg-brand-soft text-brand'
+                              : 'bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {visible ? 'Shown' : 'Hidden'}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[12px] text-slate-400">
+                        {role.staff_count || 0} staff using this role
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-1">
                       <button
                         type="button"
-                        title="Edit"
+                        title="Edit name or color"
                         onClick={() => startEdit(role)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-50 hover:text-brand"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-white hover:text-brand"
                       >
                         <i className="fas fa-pen text-[11px]" />
                       </button>
                       <button
                         type="button"
-                        title={role.active === false ? 'Activate' : 'Hide from Add Staff'}
-                        onClick={() => toggleActive(role)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-50 hover:text-amber-500"
-                      >
-                        <i className={`fas ${role.active === false ? 'fa-eye' : 'fa-eye-slash'} text-[11px]`} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete"
+                        title="Delete role"
                         onClick={() => remove(role)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500"
                       >
@@ -287,7 +315,41 @@ export default function Roles() {
                       </button>
                     </div>
                   </div>
-                </>
+
+                  {/* Clear Show / Hide control for Add Staff dropdown */}
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] font-bold text-slate-700">
+                        {visible ? 'Shown in Add Staff' : 'Hidden from Add Staff'}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {visible
+                          ? 'Staff can be assigned this role'
+                          : 'Not in the Role dropdown until you show it again'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={visible}
+                      aria-busy={busyId === role.id}
+                      disabled={busyId === role.id}
+                      aria-label={visible ? 'Hide role from Add Staff' : 'Show role in Add Staff'}
+                      onClick={() => toggleActive(role)}
+                      className={`relative h-8 w-[3.25rem] shrink-0 rounded-full transition disabled:opacity-70 ${
+                        visible ? 'bg-brand' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-[9px] font-extrabold shadow transition ${
+                          visible ? 'translate-x-[1.35rem] text-brand' : 'translate-x-0 text-slate-400'
+                        }`}
+                      >
+                        {busyId === role.id ? '…' : visible ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )
