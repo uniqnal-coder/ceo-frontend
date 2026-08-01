@@ -104,6 +104,8 @@ export default function AutoTask() {
   const [userSearch, setUserSearch] = useState('');
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [detailUser, setDetailUser] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [categoryId, setCategoryId] = useState(''); // '' = every category
   const [roleTasks, setRoleTasks] = useState([]);
   const [taskSearch, setTaskSearch] = useState('');
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -159,21 +161,33 @@ export default function AutoTask() {
     return first?.role || null;
   }, [people, selectedUsers]);
 
+  // Lessons / work types for the role currently in play.
+  useEffect(() => {
+    if (!activeRole) { setCategories([]); setCategoryId(''); return; }
+    let live = true;
+    api.get(`/api/role-categories?app_role=${activeRole}&active=1`)
+      .then((rows) => { if (live) setCategories(toArray(rows)); })
+      .catch(() => { if (live) setCategories([]); });
+    return () => { live = false; };
+  }, [activeRole]);
+
   useEffect(() => {
     if (!activeRole) { setRoleTasks([]); setSelected(new Set()); return; }
     let live = true;
     setTasksLoading(true);
-    api.get(`/api/role-tasks?role=${activeRole}`)
+    api.get(`/api/role-tasks?role=${activeRole}${categoryId ? `&category_id=${categoryId}` : ''}`)
       .then((rows) => { if (live) { setRoleTasks(toArray(rows)); setSelected(new Set()); } })
       .catch(() => { if (live) setRoleTasks([]); })
       .finally(() => { if (live) setTasksLoading(false); });
     return () => { live = false; };
-  }, [activeRole]);
+  }, [activeRole, categoryId]);
 
   const visiblePeople = useMemo(() => {
     const q = userSearch.trim().toLowerCase();
-    return q ? people.filter((p) => p.name.toLowerCase().includes(q)) : people;
-  }, [people, userSearch]);
+    let list = people;
+    if (categoryId) list = list.filter((p) => p.category_id === categoryId);
+    return q ? list.filter((p) => p.name.toLowerCase().includes(q)) : list;
+  }, [people, userSearch, categoryId]);
 
   const visibleTasks = useMemo(() => {
     const q = taskSearch.trim().toLowerCase();
@@ -404,12 +418,29 @@ export default function AutoTask() {
             </button>
           </div>
         </div>
-        <input
-          value={userSearch}
-          onChange={(e) => setUserSearch(e.target.value)}
-          placeholder={`🔍 Search ${people.length} people by name…`}
-          className="mb-2 h-10 w-full rounded-xl border border-slate-200 px-3.5 text-[13.5px] outline-none focus:border-brand"
-        />
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder={`🔍 Search ${people.length} people by name…`}
+            className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 text-[13.5px] outline-none focus:border-brand"
+          />
+          {categories.length > 0 && (
+            <select
+              value={categoryId}
+              onChange={(e) => { setCategoryId(e.target.value); setSelectedUsers(new Set()); }}
+              title={activeRole === 'teacher' ? 'Filter by lesson' : 'Filter by work type'}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-600 outline-none focus:border-brand sm:w-52"
+            >
+              <option value="">
+                {activeRole === 'teacher' ? 'All lessons' : 'All work types'}
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
         <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-100 p-1.5">
           {visiblePeople.length === 0 ? (
             <p className="py-4 text-center text-[12.5px] text-slate-400">No one matches that search</p>

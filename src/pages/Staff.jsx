@@ -245,11 +245,30 @@ function StaffForm({ staff, onClose }) {
     stage: staff?.stage || 'Junior',
     status: staff?.status || 'Active',
     email: staff?.email || '',
-    app_role: 'teacher'
+    app_role: staff?.users?.role || 'teacher',
+    category_id: staff?.category_id || ''
   })
+  const [categories, setCategories] = useState([])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
   const [account, setAccount] = useState(null)
+
+  // Lessons (teacher) / work types (staff) for the chosen app type.
+  useEffect(() => {
+    let live = true
+    api
+      .get(`/api/role-categories?app_role=${formData.app_role}&active=1`)
+      .then((rows) => {
+        if (!live) return
+        const list = Array.isArray(rows) ? rows : []
+        setCategories(list)
+        setFormData((prev) =>
+          list.some((c) => c.id === prev.category_id) ? prev : { ...prev, category_id: '' }
+        )
+      })
+      .catch(() => { if (live) setCategories([]) })
+    return () => { live = false }
+  }, [formData.app_role]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let live = true
@@ -425,6 +444,22 @@ function StaffForm({ staff, onClose }) {
                 ))}
               </select>
             </div>
+            <div style={styles.formGroup}>
+              <label>{formData.app_role === 'teacher' ? 'Lesson' : 'Work type'}</label>
+              <select
+                value={formData.category_id}
+                onChange={e => setFormData({...formData, category_id: e.target.value})}
+                style={styles.input}
+              >
+                <option value="">— none —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={styles.formRow}>
             <div style={styles.formGroup}>
               <label>Department *</label>
               <input
