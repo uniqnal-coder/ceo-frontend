@@ -6,7 +6,29 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearEndISO = () => `${new Date().getFullYear()}-12-31`;
 const HISTORY_PAGE = 25;
 
-/** Format HH:mm (24h) for display, e.g. 09:00 → 9:00 AM */
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+const PERIODS = [
+  { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+];
+
+const REPEATS = [
+  { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'custom', label: 'Custom' },
+];
+
+const ROLE_BADGE = {
+  teacher: 'bg-violet-50 text-violet-600',
+  staff: 'bg-sky-50 text-sky-600',
+};
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 const formatHHMM = (hhmm) => {
   const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return hhmm || '—';
@@ -36,22 +58,6 @@ const isPastDue = (dueAt) => {
   return Number.isFinite(t) && t < Date.now();
 };
 
-const ROLE_BADGE = {
-  teacher: 'bg-violet-50 text-violet-600',
-  staff: 'bg-sky-50 text-sky-600',
-};
-
-const REPEATS = [
-  { key: 'once', label: 'Once' },
-  { key: 'daily', label: 'Daily' },
-  { key: 'weekly', label: 'Weekly' },
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'custom', label: 'Custom' },
-];
-
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-// Does a recurring plan fire on this date? Mirrors the backend rule.
 function planFiresOn(plan, dayISO) {
   if (dayISO < plan.start_date || dayISO > plan.end_date) return false;
   const d = new Date(`${dayISO}T00:00:00`);
@@ -64,15 +70,98 @@ function planFiresOn(plan, dayISO) {
   return d.getDate() === Math.min(a.getDate(), last);
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-
-// Expand a one-off/preview schedule into dates (max 366). Weekend = Fri + Sat.
 const localISO = (dt) =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 
-function computeDates(repeat, dueDate, fromDate, toDate, weekdays = []) {
-  if (repeat === 'once') return dueDate ? [dueDate] : [];
+/**
+ * Week containing `iso`, Sunday→Saturday (matches work week after Fri/Sat weekend).
+ * Returns { days: string[], label: string }.
+ */
+function weekWindow(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return { days: [], label: '' };
+  const start = new Date(d);
+  start.setDate(d.getDate() - d.getDay()); // Sunday
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(start);
+    x.setDate(start.getDate() + i);
+    return localISO(x);
+  });
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const fmt = (dt) =>
+    dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return { days, label: `${fmt(start)} – ${fmt(end)}` };
+}
+
+function formatDayLabel(dateISO, withWeekday = true) {
+  const d = new Date(`${dateISO}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateISO;
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  if (withWeekday) opts.weekday = 'short';
+  return d.toLocaleDateString('en-GB', opts);
+}
+
+/** Race a promise against a timeout so the UI never sticks on “Assigning…”. */
+function withTimeout(promise, ms, label = 'Request') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out — try again`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function endOfWeekISO(anchorISO) {
+  const d = new Date(`${anchorISO}T00:00:00`);
+  const dow = d.getDay();
+  const toThu = dow <= 4 ? 4 - dow : 4 + (7 - dow);
+  d.setDate(d.getDate() + toThu);
+  return localISO(d);
+}
+
+function endOfMonthISO(anchorISO) {
+  const d = new Date(`${anchorISO}T00:00:00`);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return localISO(last);
+}
+
+function daysInMonth(year, monthIndex) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function datesInMonth(y, monthIndex) {
+  const n = daysInMonth(y, monthIndex);
+  return Array.from({ length: n }, (_, i) =>
+    `${y}-${String(monthIndex + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
+  );
+}
+
+function to24h(hour12, minute, ampm) {
+  let h = Number(hour12);
+  if (ampm === 'AM') {
+    if (h === 12) h = 0;
+  } else if (h !== 12) {
+    h += 12;
+  }
+  return `${String(h).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function from24h(hhmm) {
+  const m = String(hhmm || '09:00').match(/^(\d{1,2}):(\d{2})$/);
+  let h = m ? Number(m[1]) : 9;
+  const min = m ? Number(m[2]) : 0;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return { hour: h, minute: min, ampm };
+}
+
+function computeDates(mode, dueDate, fromDate, toDate, period = 'daily') {
+  if (mode === 'once') {
+    if (!dueDate) return [];
+    if (period === 'weekly') return [endOfWeekISO(dueDate)];
+    if (period === 'monthly') return [endOfMonthISO(dueDate)];
+    return [dueDate];
+  }
   if (!fromDate || !toDate) return [];
   const out = [];
   const end = new Date(`${toDate}T00:00:00`);
@@ -80,13 +169,10 @@ function computeDates(repeat, dueDate, fromDate, toDate, weekdays = []) {
   const dayOfMonth = d.getDate();
   while (d <= end && out.length < 366) {
     const dow = d.getDay();
-    if (repeat === 'daily') {
+    if (period === 'daily') {
       if (dow !== 5 && dow !== 6) out.push(localISO(d));
       d.setDate(d.getDate() + 1);
-    } else if (repeat === 'custom') {
-      if (weekdays.includes(dow)) out.push(localISO(d));
-      d.setDate(d.getDate() + 1);
-    } else if (repeat === 'weekly') {
+    } else if (period === 'weekly') {
       out.push(localISO(d));
       d.setDate(d.getDate() + 7);
     } else {
@@ -97,27 +183,31 @@ function computeDates(repeat, dueDate, fromDate, toDate, weekdays = []) {
   return out;
 }
 
-// Auto Task: assign a role's tasks to one person or a whole team —
-// once, or as a recurring plan that generates tasks automatically.
+const selectCls =
+  'h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-11 pr-9 text-[13.5px] font-semibold text-slate-700 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15';
+
 export default function AutoTask() {
   const [people, setPeople] = useState([]);
-  const [userSearch, setUserSearch] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState(new Set());
-  const [detailUser, setDetailUser] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [categoryId, setCategoryId] = useState(''); // '' = every category
+  const [appType, setAppType] = useState('staff'); // teacher | staff
+  const [categoryId, setCategoryId] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
   const [roleTasks, setRoleTasks] = useState([]);
-  const [taskSearch, setTaskSearch] = useState('');
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
-  const [repeat, setRepeat] = useState('once');
-  const [weekdaysSel, setWeekdaysSel] = useState(new Set([0, 2, 4]));
+  const [period, setPeriod] = useState('daily');
+  const [scheduleMode, setScheduleMode] = useState('once');
   const [followList, setFollowList] = useState(true);
-  const [dueDate, setDueDate] = useState(todayISO());
-  const [fromDate, setFromDate] = useState(todayISO());
-  const [toDate, setToDate] = useState(yearEndISO());
-  const [startTime, setStartTime] = useState('09:00');
-  const [dueTime, setDueTime] = useState('17:00');
+
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth()); // 0-11
+  const [day, setDay] = useState(now.getDate());
+  const initTime = from24h('09:00');
+  const [hour12, setHour12] = useState(initTime.hour);
+  const [minute] = useState(0);
+  const [ampm, setAmpm] = useState(initTime.ampm);
+
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState(null);
   const [editPlan, setEditPlan] = useState(null);
@@ -125,6 +215,46 @@ export default function AutoTask() {
   const [history, setHistory] = useState(null);
   const [historyDone, setHistoryDone] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [already, setAlready] = useState(new Map());
+  /** Weekly/monthly: { 'YYYY-MM-DD': string[] } titles scheduled that day. */
+  const [dayPlan, setDayPlan] = useState({});
+
+  const dueDate = useMemo(() => {
+    const maxDay = daysInMonth(year, month);
+    const d = Math.min(day, maxDay);
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }, [year, month, day]);
+
+  const startTime = useMemo(() => to24h(hour12, minute, ampm), [hour12, minute, ampm]);
+  const dueTime = useMemo(() => {
+    // Deadline = start + 8 hours (capped at 23:59)
+    const [h, m] = startTime.split(':').map(Number);
+    const endH = Math.min(h + 8, 23);
+    return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }, [startTime]);
+
+  const dates = useMemo(
+    () => computeDates(scheduleMode, dueDate, dueDate, yearEndISO(), period),
+    [scheduleMode, dueDate, period]
+  );
+
+  const week = useMemo(
+    () => (period === 'weekly' ? weekWindow(dueDate) : { days: [], label: '' }),
+    [period, dueDate]
+  );
+
+  const scheduleDays = useMemo(() => {
+    if (period === 'weekly') return week.days;
+    if (period === 'monthly') return datesInMonth(year, month);
+    return [];
+  }, [period, week.days, year, month]);
+
+  const scheduleWindowKey = `${period}|${scheduleDays[0] || ''}|${scheduleDays[scheduleDays.length - 1] || ''}`;
+
+  useEffect(() => {
+    // Reset day buckets only when the week/month window actually changes.
+    setDayPlan({});
+  }, [scheduleWindowKey]);
 
   const loadHistory = async (reset = true) => {
     setHistoryLoading(true);
@@ -149,101 +279,122 @@ export default function AutoTask() {
   };
 
   useEffect(() => {
-    api.get(`/api/checkins/overview?date=${todayISO()}`)
-      .then((d) => setPeople((d.people || []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => setPeople([]));
+    // Prefer Teachers & Staff roster (reliable). Fall back to check-in overview.
+    (async () => {
+      try {
+        const rows = toArray(await api.get('/api/staff'));
+        const mapped = rows
+          .filter((r) => r.user_id && (r.users?.role === 'teacher' || r.users?.role === 'staff'))
+          .map((r) => ({
+            id: r.user_id,
+            name: r.name || '—',
+            role: r.users.role,
+            job_role: r.role || null,
+            category_id: r.category_id || null,
+            category_name: null,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (mapped.length) {
+          setPeople(mapped);
+          return;
+        }
+      } catch {
+        /* try checkins next */
+      }
+      try {
+        const d = await api.get(`/api/checkins/overview?date=${todayISO()}`);
+        setPeople((d.people || []).sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (err) {
+        setPeople([]);
+        toast.error(err.message || 'Could not load people');
+      }
+    })();
     loadHistory();
     loadPlans();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeRole = useMemo(() => {
-    const first = people.find((p) => selectedUsers.has(p.id));
-    return first?.role || null;
-  }, [people, selectedUsers]);
-
-  // Lessons / work types for the role currently in play.
+  // Load roles (subjects / staff roles) when type changes.
   useEffect(() => {
-    if (!activeRole) { setCategories([]); setCategoryId(''); return; }
     let live = true;
-    api.get(`/api/role-categories?app_role=${activeRole}&active=1`)
-      .then((rows) => { if (live) setCategories(toArray(rows)); })
-      .catch(() => { if (live) setCategories([]); });
+    setCategoryId('');
+    setEmployeeId('');
+    setSelected(new Set());
+    (async () => {
+      try {
+        let rows = toArray(await api.get(`/api/role-categories?app_role=${appType}&active=1`));
+        // If none marked active, still show all so Assign Task isn't empty.
+        if (!rows.length) {
+          rows = toArray(await api.get(`/api/role-categories?app_role=${appType}`));
+        }
+        if (live) setCategories(rows);
+      } catch (err) {
+        if (live) {
+          setCategories([]);
+          toast.error(err.message || 'Could not load roles');
+        }
+      }
+    })();
     return () => { live = false; };
-  }, [activeRole]);
+  }, [appType]);
 
+  // Load task templates for type + role.
   useEffect(() => {
-    if (!activeRole) { setRoleTasks([]); setSelected(new Set()); return; }
+    if (!categoryId) { setRoleTasks([]); setSelected(new Set()); return; }
     let live = true;
     setTasksLoading(true);
-    api.get(`/api/role-tasks?role=${activeRole}${categoryId ? `&category_id=${categoryId}` : ''}`)
-      .then((rows) => { if (live) { setRoleTasks(toArray(rows)); setSelected(new Set()); } })
-      .catch(() => { if (live) setRoleTasks([]); })
-      .finally(() => { if (live) setTasksLoading(false); });
-    return () => { live = false; };
-  }, [activeRole, categoryId]);
-
-  const visiblePeople = useMemo(() => {
-    const q = userSearch.trim().toLowerCase();
-    let list = people;
-    if (categoryId) list = list.filter((p) => p.category_id === categoryId);
-    return q ? list.filter((p) => p.name.toLowerCase().includes(q)) : list;
-  }, [people, userSearch, categoryId]);
-
-  const visibleTasks = useMemo(() => {
-    const q = taskSearch.trim().toLowerCase();
-    return q ? roleTasks.filter((t) => t.title.toLowerCase().includes(q)) : roleTasks;
-  }, [roleTasks, taskSearch]);
-
-  const toggleUser = (p) => {
-    setSelectedUsers((prev) => {
-      const nextSel = new Set(prev);
-      if (nextSel.has(p.id)) nextSel.delete(p.id);
-      else nextSel.add(p.id);
-      return nextSel;
-    });
-  };
-
-  const selectAllUsers = () => {
-    const role = activeRole || visiblePeople[0]?.role;
-    setSelectedUsers(new Set(visiblePeople.filter((p) => p.role === role).map((p) => p.id)));
-  };
-
-  const toggleTask = (title) => {
-    setSelected((prev) => {
-      const nextSel = new Set(prev);
-      if (nextSel.has(title)) nextSel.delete(title);
-      else nextSel.add(title);
-      return nextSel;
-    });
-  };
-
-  const allTasksSelected = visibleTasks.length > 0 &&
-    visibleTasks.every((t) => selected.has(t.title));
-  const toggleAllTasks = () => {
-    setSelected((prev) => {
-      const nextSel = new Set(prev);
-      for (const t of visibleTasks) {
-        if (allTasksSelected) nextSel.delete(t.title);
-        else nextSel.add(t.title);
+    (async () => {
+      try {
+        const scoped = toArray(await api.get(`/api/role-tasks?role=${appType}&category_id=${categoryId}`));
+        const roleWide = toArray(await api.get(`/api/role-tasks?role=${appType}&category_id=none`));
+        const seen = new Set();
+        const merged = [];
+        for (const t of [...scoped, ...roleWide]) {
+          if (seen.has(t.title)) continue;
+          seen.add(t.title);
+          merged.push(t);
+        }
+        if (live) {
+          setRoleTasks(merged);
+          setSelected(new Set(merged.map((t) => t.title)));
+        }
+      } catch {
+        if (live) setRoleTasks([]);
+      } finally {
+        if (live) setTasksLoading(false);
       }
-      return nextSel;
-    });
-  };
+    })();
+    return () => { live = false; };
+  }, [appType, categoryId]);
 
-  const dates = useMemo(
-    () => computeDates(repeat, dueDate, fromDate, toDate, [...weekdaysSel]),
-    [repeat, dueDate, fromDate, toDate, weekdaysSel]
+  const roleLabel = appType === 'teacher' ? 'Subject' : 'Staff role';
+  const activeCategory = categories.find((c) => c.id === categoryId) || null;
+  const activeCategoryName = activeCategory?.name || null;
+
+  const employees = useMemo(() => {
+    let list = people.filter((p) => p.role === appType);
+    if (categoryId) {
+      const catName = (categories.find((c) => c.id === categoryId)?.name || '')
+        .trim()
+        .toLowerCase();
+      list = list.filter((p) => {
+        if (p.category_id === categoryId) return true;
+        const job = String(p.job_role || p.category_name || '').trim().toLowerCase();
+        return !!catName && job === catName;
+      });
+    }
+    return list;
+  }, [people, appType, categoryId, categories]);
+
+  const selectedEmployee = employees.find((p) => p.id === employeeId) || null;
+  const selectedUsers = useMemo(
+    () => (employeeId ? new Set([employeeId]) : new Set()),
+    [employeeId]
   );
 
-  // Which of the selected people already have each task in this window?
-  // Lets the admin see duplicates before saving instead of after.
-  const [already, setAlready] = useState(new Map()); // title -> Set(user_id)
   useEffect(() => {
     if (selectedUsers.size === 0 || dates.length === 0) { setAlready(new Map()); return; }
     let live = true;
-    const from = dates[0];
-    const to = dates[dates.length - 1];
-    api.get(`/api/staff-tasks/existing?user_ids=${[...selectedUsers].join(',')}&from=${from}&to=${to}`)
+    api.get(`/api/staff-tasks/existing?user_ids=${[...selectedUsers].join(',')}&from=${dates[0]}&to=${dates[dates.length - 1]}`)
       .then((rows) => {
         if (!live) return;
         const map = new Map();
@@ -257,85 +408,177 @@ export default function AutoTask() {
     return () => { live = false; };
   }, [selectedUsers, dates]);
 
-  // A task is fully covered when every selected person already has it.
-  const coverageOf = (title) => {
-    const who = already.get(title);
-    if (!who) return 0;
-    let n = 0;
-    for (const id of selectedUsers) if (who.has(id)) n += 1;
-    return n;
+  const toggleTask = (title) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
   };
-  // How many (user × task) pairs in this send are already assigned.
-  const dupeCount = useMemo(() => {
-    const titles = repeat !== 'once' && followList
-      ? roleTasks.map((t) => t.title)
-      : [...selected];
-    let n = 0;
-    for (const title of titles) n += coverageOf(title) * Math.max(dates.length, 1);
-    return n;
-  }, [already, selected, selectedUsers, roleTasks, repeat, followList, dates]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const recurring = repeat !== 'once';
+  const toggleDayTask = (date, title) => {
+    setDayPlan((prev) => {
+      const cur = new Set(prev[date] || []);
+      if (cur.has(title)) cur.delete(title);
+      else cur.add(title);
+      const next = { ...prev };
+      if (cur.size) next[date] = [...cur];
+      else delete next[date];
+      return next;
+    });
+  };
+
+  const recurring = scheduleMode === 'recurring';
   const usingList = recurring && followList;
-  const taskCount = usingList ? roleTasks.length : selected.size;
-  const timesOk = startTime && dueTime && startTime < dueTime;
-  const canSave = selectedUsers.size > 0 && taskCount > 0 && timesOk &&
-    (repeat === 'custom' ? weekdaysSel.size > 0 : true) &&
-    (recurring ? fromDate && toDate && toDate >= fromDate : !!dueDate);
+  const scheduledSlotCount = useMemo(
+    () => Object.values(dayPlan).reduce((n, t) => n + (t?.length || 0), 0),
+    [dayPlan]
+  );
+  const taskCount =
+    period === 'daily'
+      ? (usingList ? roleTasks.length : selected.size)
+      : scheduledSlotCount;
+  const canSave = !!employeeId && !!categoryId && taskCount > 0 && !!dueDate;
 
   const resetForm = () => {
-    setSelectedUsers(new Set());
-    setUserSearch('');
-    setTaskSearch('');
-    setSelected(new Set());
-    setRepeat('once');
+    setEmployeeId('');
+    setSelected(new Set(roleTasks.map((t) => t.title)));
+    setPeriod('daily');
+    setScheduleMode('once');
     setFollowList(true);
-    setDueDate(todayISO());
-    setFromDate(todayISO());
-    setToDate(yearEndISO());
-    setStartTime('09:00');
-    setDueTime('17:00');
+    setDayPlan({});
   };
 
   const save = async () => {
-    if (!canSave || saving) return;
+    if (saving) return;
+    if (!categoryId) {
+      toast.error(`Select a ${roleLabel.toLowerCase()} first`);
+      return;
+    }
+    if (!employeeId) {
+      toast.error('Select an employee first');
+      return;
+    }
     const titles = roleTasks.map((t) => t.title).filter((t) => selected.has(t));
+    const assignments = Object.entries(dayPlan)
+      .filter(([, list]) => list?.length)
+      .map(([date, list]) => ({ date, titles: list }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (period === 'daily' && !titles.length && !usingList) {
+      toast.error('Select at least one task');
+      return;
+    }
+    if (period !== 'daily' && !assignments.length) {
+      toast.error(`Tap tasks under each day to schedule them`);
+      return;
+    }
     setSaving(true);
     try {
+      const periodWord = period.charAt(0).toUpperCase() + period.slice(1);
+      const groupTitle = activeCategoryName
+        ? `${activeCategoryName} ${periodWord} checklist`
+        : `${periodWord} tasks`;
+
+      const postBulk = (payload) =>
+        withTimeout(
+          api.post('/api/staff-tasks/bulk', {
+            start_time: startTime,
+            due_time: dueTime,
+            group_title: groupTitle,
+            period,
+            ...payload,
+          }),
+          45000,
+          'Assign'
+        );
+
       if (!recurring) {
-        const r = await api.post('/api/staff-tasks/bulk', {
-          user_ids: [...selectedUsers],
-          titles,
-          dates,
-          start_time: startTime,
-          due_time: dueTime,
-          group_title: activeRole
-            ? `${activeRole.charAt(0).toUpperCase()}${activeRole.slice(1)} checklist`
-            : 'Assigned tasks',
-        });
-        const items = r.subtasks || r.created || 0;
+        let items = 0;
+        let skippedCompleted = 0;
+        if (period === 'daily') {
+          const r = await postBulk({
+            user_ids: [employeeId],
+            titles,
+            dates,
+          });
+          items = (r.subtasks || 0) + (r.created || 0);
+          skippedCompleted = r.skippedCompleted || 0;
+        } else {
+          // Prefer one request with per-day assignments (newer API).
+          // Fall back to one titles+dates call per day for older servers.
+          try {
+            const r = await postBulk({
+              user_ids: [employeeId],
+              assignments,
+            });
+            items = (r.subtasks || 0) + (r.created || 0);
+            skippedCompleted = r.skippedCompleted || 0;
+          } catch (firstErr) {
+            const msg = String(firstErr?.message || '');
+            // Older production APIs reject when `titles` is missing (no `assignments` support).
+            const needLegacy = /titles is required|titles or assignments/i.test(msg);
+            if (!needLegacy) throw firstErr;
+
+            const results = await Promise.allSettled(
+              assignments.map(({ date, titles: dayTitles }) =>
+                postBulk({
+                  user_ids: [employeeId],
+                  titles: dayTitles,
+                  dates: [date],
+                })
+              )
+            );
+            const failed = [];
+            results.forEach((res, i) => {
+              if (res.status === 'fulfilled') {
+                items += (res.value.subtasks || 0) + (res.value.created || 0);
+                skippedCompleted += res.value.skippedCompleted || 0;
+              } else {
+                failed.push(formatDayLabel(assignments[i].date, false));
+              }
+            });
+            if (failed.length && !items) {
+              const errMsg = results.find((r) => r.status === 'rejected')?.reason?.message;
+              throw new Error(errMsg || `Assign failed for ${failed.join(', ')}`);
+            }
+            if (failed.length) {
+              toast.error(`Some days failed: ${failed.join(', ')}`);
+            }
+          }
+        }
         toast.success(
-          `Assigned ${items} task${items === 1 ? '' : 's'} as ${r.created || 1} checklist` +
-          ` across ${r.users} user${r.users === 1 ? '' : 's'}` +
-          (r.skippedCompleted ? ` (${r.skippedCompleted} already completed skipped)` : '')
+          `Assigned ${items} ${period} task${items === 1 ? '' : 's'}` +
+          (skippedCompleted ? ` (${skippedCompleted} already done skipped)` : '')
         );
       } else {
-        const everyone = people.filter((p) => p.role === activeRole)
-          .every((p) => selectedUsers.has(p.id));
+        const day_titles = {};
+        const weekdays = [];
+        for (const { date, titles: dayTitles } of assignments) {
+          const dow = new Date(`${date}T00:00:00`).getDay();
+          day_titles[String(dow)] = dayTitles;
+          weekdays.push(dow);
+        }
+        const useBuckets = period !== 'daily' && Object.keys(day_titles).length > 0;
+        const allDayTitles = [...new Set(assignments.flatMap((a) => a.titles))];
         const r = await api.post('/api/task-schedules', {
-          role: activeRole,
-          user_ids: everyone ? [] : [...selectedUsers],
-          titles: usingList ? [] : titles,
-          repeat,
-          weekdays: repeat === 'custom' ? [...weekdaysSel] : [],
-          start_date: fromDate,
-          end_date: toDate,
+          role: appType,
+          category_id: categoryId || null,
+          period,
+          user_ids: [employeeId],
+          titles: useBuckets ? allDayTitles : (usingList ? [] : titles),
+          repeat: useBuckets ? 'custom' : period,
+          weekdays: useBuckets ? [...new Set(weekdays)] : [],
+          day_titles: useBuckets ? day_titles : undefined,
+          start_date: dueDate,
+          end_date: yearEndISO(),
           start_time: startTime,
           due_time: dueTime,
         });
         toast.success(
-          `Recurring plan created — tasks generate automatically` +
-          (r.createdToday ? ` (${r.createdToday} created for today)` : '')
+          `Recurring plan created` +
+          (r.createdToday ? ` (${r.createdToday} for today)` : '')
         );
         loadPlans();
       }
@@ -368,22 +611,26 @@ export default function AutoTask() {
     }
   };
 
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+  const dayOptions = Array.from({ length: daysInMonth(year, month) }, (_, i) => i + 1);
+  const hourOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   return (
-    <div className="mx-auto max-w-4xl p-5">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto max-w-6xl p-5">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-extrabold text-slate-800">⚡ Auto Task</h1>
-          <p className="text-[13px] text-slate-500">
-            Assign a role's standard tasks once, or set a recurring plan that runs all year by itself.
-          </p>
+          <p className="text-[12px] font-semibold text-slate-400">Tasks › Assign Task</p>
+          <h1 className="text-[22px] font-extrabold text-slate-800">Assign Task</h1>
         </div>
         <div className="flex rounded-xl border border-slate-200 bg-white p-1">
-          {[['assign', 'fa-bolt', 'Assign'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
+          {[['assign', 'fa-paper-plane', 'Assign'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
             <button
               key={key}
+              type="button"
               onClick={() => setView(key)}
               className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12.5px] font-extrabold transition ${
-                view === key ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-50'
+                view === key ? 'bg-[#1e3a5f] text-white' : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
               <i className={`fas ${icon} text-[11px]`} /> {label}
@@ -401,437 +648,502 @@ export default function AutoTask() {
         />
       )}
 
-      <div className={view === 'assign' ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
-        {/* Step 1 — users */}
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Step 1 · Select users {activeRole && <span className="ml-1 normal-case">(role locked to {activeRole})</span>}
-          </p>
-          <div className="flex items-center gap-3">
-            {selectedUsers.size > 0 && (
-              <button onClick={() => setSelectedUsers(new Set())} className="text-[11.5px] font-bold text-slate-400 hover:underline">
-                Clear
-              </button>
-            )}
-            <button onClick={selectAllUsers} className="text-[11.5px] font-bold text-brand hover:underline">
-              Select all {activeRole ? (activeRole === 'staff' ? 'staff' : 'teachers') : ''}
-            </button>
-          </div>
-        </div>
-        <div className="mb-2 flex flex-col gap-2 sm:flex-row">
-          <input
-            value={userSearch}
-            onChange={(e) => setUserSearch(e.target.value)}
-            placeholder={`🔍 Search ${people.length} people by name…`}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 text-[13.5px] outline-none focus:border-brand"
-          />
-          {categories.length > 0 && (
-            <select
-              value={categoryId}
-              onChange={(e) => { setCategoryId(e.target.value); setSelectedUsers(new Set()); }}
-              title={activeRole === 'teacher' ? 'Filter by lesson' : 'Filter by work type'}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-600 outline-none focus:border-brand sm:w-52"
-            >
-              <option value="">
-                {activeRole === 'teacher' ? 'All lessons' : 'All work types'}
-              </option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-100 p-1.5">
-          {visiblePeople.length === 0 ? (
-            <p className="py-4 text-center text-[12.5px] text-slate-400">No one matches that search</p>
-          ) : (
-            visiblePeople.map((p) => {
-              const on = selectedUsers.has(p.id);
-              const locked = activeRole && p.role !== activeRole;
-              return (
-                <div
-                  key={p.id}
-                  className={`flex items-center rounded-lg transition ${
-                    on ? 'bg-brand-soft/50' : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <button
-                    onClick={() => !locked && toggleUser(p)}
-                    disabled={locked}
-                    title={locked ? `Deselect ${activeRole}s first — one role per save` : undefined}
-                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left ${locked ? 'opacity-35' : ''}`}
-                  >
-                    <i className={`fas ${on ? 'fa-square-check text-brand' : 'fa-square text-slate-200'} text-[15px]`} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-700">{p.name}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-400'}`}>
-                      {p.role}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setDetailUser(p)}
-                    title={`${p.name} — details & task calendar`}
-                    className="mx-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-white hover:text-brand"
-                  >
-                    <i className="fas fa-calendar-days text-[13px]" />
-                  </button>
+      {view === 'assign' && (
+        <>
+          <div className="space-y-5">
+            {/* Who — always full width so selectors never disappear */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-[16px] font-extrabold text-slate-800">Assign to</h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">1</span>
+                    <span className="text-[13px] font-bold text-slate-700">Staff or Teacher</span>
+                  </div>
+                  <div className="relative">
+                    <i className="fas fa-users absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-[#2563eb]" />
+                    <select
+                      value={appType}
+                      onChange={(e) => setAppType(e.target.value)}
+                      className={selectCls}
+                    >
+                      <option value="staff">Staff</option>
+                      <option value="teacher">Teacher</option>
+                    </select>
+                    <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[10px] text-slate-400" />
+                  </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-        {selectedUsers.size > 1 && (
-          <p className="mt-1.5 text-[11.5px] font-semibold text-brand">
-            {selectedUsers.size} users selected — the same tasks go to all of them
-          </p>
-        )}
 
-        {/* Step 2 — tasks */}
-        {activeRole && (
-          <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Step 2 · Tasks ({activeRole} list)
-              </p>
-              {!usingList && roleTasks.length > 0 && (
-                <button onClick={toggleAllTasks} className="text-[11.5px] font-bold text-brand hover:underline">
-                  {allTasksSelected ? 'Clear all' : `Select all${taskSearch ? ' matching' : ''}`}
-                </button>
-              )}
+                <div>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">2</span>
+                    <span className="text-[13px] font-bold text-slate-700">{roleLabel}</span>
+                  </div>
+                  <div className="relative">
+                    <i className="fas fa-briefcase absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-violet-500" />
+                    <select
+                      value={categoryId}
+                      onChange={(e) => { setCategoryId(e.target.value); setEmployeeId(''); }}
+                      className={selectCls}
+                    >
+                      <option value="">Select {roleLabel.toLowerCase()}…</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{c.staff_count ? ` · ${c.staff_count}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[10px] text-slate-400" />
+                  </div>
+                  {!categories.length && (
+                    <p className="mt-1.5 text-[11.5px] text-amber-600">
+                      {appType === 'teacher'
+                        ? 'No subjects found — add them under Subjects.'
+                        : 'No staff roles found — add them under Staff Roles.'}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">3</span>
+                    <span className="text-[13px] font-bold text-slate-700">Employee</span>
+                  </div>
+                  <div className="relative">
+                    <i className="fas fa-user absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-emerald-500" />
+                    <select
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
+                      disabled={!categoryId}
+                      className={`${selectCls} disabled:bg-slate-50 disabled:text-slate-400`}
+                    >
+                      <option value="">
+                        {!categoryId ? `Select a ${roleLabel.toLowerCase()} first…` : 'Select employee…'}
+                      </option>
+                      {employees.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[10px] text-slate-400" />
+                  </div>
+                  {categoryId && !employees.length && (
+                    <p className="mt-1.5 text-[11.5px] text-amber-600">
+                      No one linked to this {roleLabel.toLowerCase()} — set it in Teachers &amp; Staff.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {recurring && (
-              <label className="mb-2 flex cursor-pointer items-center gap-2.5 rounded-xl bg-slate-50 px-3.5 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={followList}
-                  onChange={(e) => setFollowList(e.target.checked)}
-                  className="h-4 w-4 accent-[color:var(--color-brand,#188a54)]"
-                />
-                <span className="text-[12.5px] font-semibold text-slate-600">
-                  Always follow the role's task list — when you edit the Task section, the plan updates automatically
-                </span>
-              </label>
-            )}
+            <div className="grid gap-5 lg:grid-cols-2">
+              {/* Daily task checklist (weekly/monthly schedule below handles picking) */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <i className="fas fa-clipboard-list text-[#2563eb]" />
+                  <h3 className="text-[15px] font-extrabold text-slate-800">
+                    {period === 'daily' ? 'Tasks' : 'Task pool'}
+                  </h3>
+                  <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[11px] font-extrabold text-white">
+                    {period === 'daily' ? selected.size : roleTasks.length}
+                  </span>
+                </div>
 
-            {tasksLoading ? (
-              <p className="py-6 text-center text-[13px] text-slate-400">Loading tasks…</p>
-            ) : roleTasks.length === 0 ? (
-              <p className="rounded-xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-700">
-                No tasks defined for the {activeRole} role yet — add them in the <b>Task</b> section first.
-              </p>
-            ) : usingList ? (
-              <p className="rounded-xl border border-brand/20 bg-brand-soft/30 px-4 py-3 text-[12.5px] font-semibold text-slate-600">
-                <i className="fas fa-rotate mr-1.5 text-brand" />
-                Using the full {activeRole} task list ({roleTasks.length} task{roleTasks.length === 1 ? '' : 's'}), always in sync with the Task section.
-              </p>
-            ) : (
-              <>
-                {roleTasks.length > 6 && (
-                  <input
-                    value={taskSearch}
-                    onChange={(e) => setTaskSearch(e.target.value)}
-                    placeholder={`🔍 Filter ${roleTasks.length} tasks…`}
-                    className="mb-2 h-9 w-full rounded-xl border border-slate-200 px-3.5 text-[13px] outline-none focus:border-brand"
-                  />
+                {period !== 'daily' && (
+                  <p className="mb-3 text-[12px] text-slate-500">
+                    Tap tasks under each day on the right to schedule them.
+                    {selectedEmployee?.name ? (
+                      <> · For <span className="font-bold text-slate-700">{selectedEmployee.name}</span></>
+                    ) : null}
+                  </p>
                 )}
-                <div className="max-h-72 space-y-1.5 overflow-y-auto pr-0.5">
-                  {visibleTasks.map((t) => {
-                    const on = selected.has(t.title);
-                    const have = coverageOf(t.title);
-                    const allHave = have > 0 && have === selectedUsers.size;
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => !allHave && toggleTask(t.title)}
-                        disabled={allHave}
-                        title={allHave ? 'Already assigned for these dates — no need to send again' : undefined}
-                        className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition ${
-                          allHave
-                            ? 'cursor-not-allowed border-slate-100 bg-slate-50'
-                            : on
-                              ? 'border-brand bg-brand-soft/40'
-                              : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <i className={`fas ${
-                          allHave ? 'fa-circle-check text-slate-300'
-                            : on ? 'fa-square-check text-brand'
-                            : 'fa-square text-slate-200'
-                        } text-[17px]`} />
-                        <span className={`min-w-0 flex-1 truncate text-[13.5px] font-semibold ${allHave ? 'text-slate-400' : 'text-slate-700'}`}>
-                          {t.title}
-                        </span>
-                        {have > 0 && (
-                          <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                            allHave ? 'bg-slate-200 text-slate-500' : 'bg-amber-50 text-amber-600'
-                          }`}>
-                            {allHave
-                              ? 'Already sent'
-                              : `${have}/${selectedUsers.size} have it`}
+
+                {!categoryId ? (
+                  <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-[12.5px] text-slate-400">
+                    Select a {roleLabel.toLowerCase()} to load tasks
+                  </p>
+                ) : tasksLoading ? (
+                  <p className="py-6 text-center text-[12.5px] text-slate-400">Loading tasks…</p>
+                ) : roleTasks.length === 0 ? (
+                  <p className="rounded-xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-700">
+                    No tasks for this {roleLabel.toLowerCase()} yet — add them in Add Task.
+                  </p>
+                ) : period === 'daily' ? (
+                  <div className="max-h-72 space-y-1.5 overflow-y-auto rounded-xl bg-[#eff6ff] p-3">
+                    {roleTasks.map((t) => {
+                      const on = selected.has(t.title);
+                      const have = already.get(t.title)?.has(employeeId);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition ${
+                            have ? 'opacity-50' : 'hover:bg-white/70'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            disabled={!!have}
+                            onChange={() => toggleTask(t.title)}
+                            className="h-4 w-4 accent-[#2563eb]"
+                          />
+                          <span className={`text-[13px] font-semibold ${on ? 'text-slate-800' : 'text-slate-500'}`}>
+                            {t.title}
                           </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                          {have && (
+                            <span className="ml-auto text-[10px] font-bold text-slate-400">Already sent</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <ul className="max-h-72 space-y-1 overflow-y-auto rounded-xl bg-slate-50 p-3 text-[13px] font-semibold text-slate-600">
+                    {roleTasks.map((t) => (
+                      <li key={t.id} className="rounded-lg px-2 py-1.5">{t.title}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <i className="fas fa-calendar-days text-[#2563eb]" />
+                  <h3 className="text-[15px] font-extrabold text-slate-800">Date &amp; Time</h3>
                 </div>
-              </>
-            )}
-          </div>
-        )}
 
-        {/* Step 3 — schedule + save */}
-        {activeRole && roleTasks.length > 0 && (
-          <div className="mt-5 border-t border-slate-100 pt-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Step 3 · Schedule
-            </p>
-
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {REPEATS.map((r) => (
-                <button
-                  key={r.key}
-                  type="button"
-                  onClick={() => setRepeat(r.key)}
-                  className={`rounded-lg border px-3 py-1.5 text-[12px] font-bold transition ${
-                    repeat === r.key
-                      ? 'border-brand bg-brand text-white'
-                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {!recurring ? (
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-semibold text-slate-400">Date</span>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
-                  />
-                </label>
-              ) : (
-                <>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">From</span>
-                    <input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">To</span>
-                    <input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
-                    />
-                  </label>
-                </>
-              )}
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold text-slate-400">Start</span>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-[13.5px] outline-none focus:border-brand"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold text-slate-400">Deadline</span>
-                <input
-                  type="time"
-                  value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
-                  className={`h-10 w-full rounded-xl border px-3 text-[13.5px] outline-none focus:border-brand ${
-                    timesOk ? 'border-slate-200' : 'border-red-300'
-                  }`}
-                />
-              </label>
-            </div>
-
-            {repeat === 'custom' && (
-              <div className="mt-3 flex flex-wrap gap-1">
-                {WEEKDAY_LABELS.map((label, i) => {
-                  const on = weekdaysSel.has(i);
-                  return (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {PERIODS.map((p) => (
                     <button
-                      key={i}
+                      key={p.key}
                       type="button"
-                      onClick={() => setWeekdaysSel((prev) => {
-                        const nextSel = new Set(prev);
-                        if (nextSel.has(i)) nextSel.delete(i);
-                        else nextSel.add(i);
-                        return nextSel;
-                      })}
-                      className={`h-8 w-10 rounded-lg text-[11px] font-extrabold transition ${
-                        on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      onClick={() => setPeriod(p.key)}
+                      className={`rounded-lg border px-3 py-1.5 text-[12px] font-bold transition ${
+                        period === p.key
+                          ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
                       }`}
                     >
-                      {label}
+                      {p.label}
                     </button>
-                  );
-                })}
-              </div>
-            )}
+                  ))}
+                </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[12px] text-slate-400">
-                {dupeCount > 0 && (
-                  <span className="mr-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-extrabold text-amber-600">
-                    {dupeCount} already sent — skipped
-                  </span>
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Month</span>
+                    <div className="relative">
+                      <select
+                        value={month}
+                        onChange={(e) => setMonth(Number(e.target.value))}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                      >
+                        {MONTH_SHORT.map((m, i) => (
+                          <option key={m} value={i}>{m}</option>
+                        ))}
+                      </select>
+                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">
+                      {period === 'weekly' ? 'Day in week' : 'Date'}
+                    </span>
+                    <div className="relative">
+                      <select
+                        value={Math.min(day, daysInMonth(year, month))}
+                        onChange={(e) => setDay(Number(e.target.value))}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                      >
+                        {dayOptions.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Year</span>
+                    <div className="relative">
+                      <select
+                        value={year}
+                        onChange={(e) => setYear(Number(e.target.value))}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                      >
+                        {years.map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
+                    </div>
+                  </label>
+                </div>
+
+                {period === 'weekly' && week.label && (
+                  <div className="mb-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-[12.5px] font-bold text-[#1e40af]">
+                    Week shown: {week.label}
+                    <span className="mt-0.5 block text-[11px] font-semibold text-[#3b82f6]">
+                      Sun–Sat week that includes {formatDayLabel(dueDate, false)}
+                    </span>
+                  </div>
                 )}
-                {selectedUsers.size} people · {usingList ? roleTasks.length : selected.size} tasks
-                {recurring ? ` · ${dates.length} days` : ''}
-                {!timesOk ? ' · deadline must be after start' : ''}
-              </p>
+                {period === 'monthly' && (
+                  <div className="mb-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-[12.5px] font-bold text-[#1e40af]">
+                    Month shown: {MONTHS[month]} {year}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Time start</span>
+                    <div className="relative">
+                      <select
+                        value={hour12}
+                        onChange={(e) => setHour12(Number(e.target.value))}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                      >
+                        {hourOptions.map((h) => (
+                          <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                        ))}
+                      </select>
+                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">AM / PM</span>
+                    <div className="relative">
+                      <select
+                        value={ampm}
+                        onChange={(e) => setAmpm(e.target.value)}
+                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                      >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {[
+                    { key: 'once', label: 'One-time' },
+                    { key: 'recurring', label: 'Recurring plan' },
+                  ].map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setScheduleMode(m.key)}
+                      className={`rounded-lg border px-3 py-1 text-[11.5px] font-bold transition ${
+                        scheduleMode === m.key
+                          ? 'border-[#2563eb] bg-[#eff6ff] text-[#2563eb]'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                {period !== 'daily' && (
+                  <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-[12.5px] font-extrabold text-slate-700">
+                        Schedule by {period === 'weekly' ? 'weekday' : 'date'}
+                      </p>
+                      <span className="rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-extrabold text-white">
+                        {scheduledSlotCount} slotted
+                      </span>
+                    </div>
+                    <p className="mb-3 text-[11px] text-slate-400">
+                      {period === 'weekly'
+                        ? `Pick tasks for each day in ${week.label || 'this week'}.`
+                        : `Pick tasks for each day in ${MONTHS[month]} ${year}.`}
+                    </p>
+                    {!roleTasks.length ? (
+                      <p className="text-[12px] text-slate-400">Select a {roleLabel.toLowerCase()} first.</p>
+                    ) : (
+                      <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                        {scheduleDays.map((dateISO) => {
+                          const picked = new Set(dayPlan[dateISO] || []);
+                          const pool = roleTasks.map((t) => t.title);
+                          const isAnchor = dateISO === dueDate;
+                          return (
+                            <div
+                              key={dateISO}
+                              className={`rounded-xl border bg-white p-2.5 ${
+                                isAnchor ? 'border-[#2563eb] ring-1 ring-[#2563eb]/20' : 'border-slate-200'
+                              }`}
+                            >
+                              <div className="mb-1.5 flex items-center justify-between gap-2">
+                                <span className="text-[12px] font-extrabold text-slate-700">
+                                  {formatDayLabel(dateISO, true)}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  {picked.size} selected
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {pool.map((title) => {
+                                  const on = picked.has(title);
+                                  return (
+                                    <button
+                                      key={title}
+                                      type="button"
+                                      onClick={() => toggleDayTask(dateISO, title)}
+                                      className={`rounded-lg border px-2 py-1 text-[11px] font-bold transition ${
+                                        on
+                                          ? 'border-[#2563eb] bg-[#eff6ff] text-[#1e40af]'
+                                          : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-white'
+                                      }`}
+                                    >
+                                      {title}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom action bar */}
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5 rounded-xl bg-[#eff6ff] px-3.5 py-2.5 text-[12.5px] text-[#1e40af]">
+              <i className="fas fa-circle-info mt-0.5" />
+              <span>Make sure all details are correct before assigning the task.</span>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-[13px] font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={save}
                 disabled={saving || !canSave}
-                className="rounded-xl bg-brand px-6 py-2.5 text-[13.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a5f] px-5 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
-                {saving ? 'Saving…' : recurring ? 'Create plan' : 'Assign'}
+                <i className="fas fa-paper-plane text-[12px]" />
+                {saving ? 'Assigning…' : recurring ? 'Create plan' : 'Assign Task'}
               </button>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Recurring plans */}
-      {view === 'assign' && plans && plans.length > 0 && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Recurring plans
-          </p>
-          <div className="space-y-2">
-            {plans.map((plan) => (
-              <div key={plan.id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 px-3.5 py-2.5">
-                <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>
-                  {plan.role}
-                </span>
-                <span className="text-[12.5px] font-bold text-slate-700">
-                  {REPEATS.find((r) => r.key === plan.repeat)?.label || plan.repeat}
-                </span>
-                <span className="text-[11.5px] text-slate-500">
-                  {plan.user_ids?.length ? `${plan.user_ids.length} user${plan.user_ids.length === 1 ? '' : 's'}` : `All ${plan.role === 'staff' ? 'staff' : 'teachers'}`}
-                  {' · '}
-                  {plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list (auto)'}
-                  {' · '}
-                  {plan.start_date} → {plan.end_date}
-                  {(plan.start_time || plan.due_time) && (
-                    <> · {formatHHMM(plan.start_time || '09:00')}–{formatHHMM(plan.due_time || '17:00')}</>
-                  )}
-                </span>
-                <span className="ml-auto flex items-center gap-1.5">
-                  <button
-                    onClick={() => togglePlan(plan)}
-                    className={`rounded-full px-3 py-1 text-[11px] font-extrabold transition ${
-                      plan.active
-                        ? 'bg-brand-soft text-brand hover:opacity-80'
-                        : 'bg-slate-200 text-slate-500 hover:opacity-80'
-                    }`}
-                  >
-                    {plan.active ? '● Active' : '⏸ Paused'}
-                  </button>
-                  <button
-                    onClick={() => setEditPlan(plan)}
-                    title="Edit / reschedule plan"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-brand"
-                  >
-                    <i className="fas fa-pen text-[11px]" />
-                  </button>
-                  <button
-                    onClick={() => deletePlan(plan)}
-                    title="Delete plan"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
-                  >
-                    <i className="fas fa-trash text-[11px]" />
-                  </button>
-                </span>
+          {/* Recurring plans */}
+          {plans && plans.length > 0 && (
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Recurring plans
+              </p>
+              <div className="space-y-2">
+                {plans.map((plan) => (
+                  <div key={plan.id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 px-3.5 py-2.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>
+                      {plan.role}
+                    </span>
+                    <span className="text-[12.5px] font-bold text-slate-700">
+                      {REPEATS.find((r) => r.key === plan.repeat)?.label || plan.repeat}
+                    </span>
+                    <span className="text-[11.5px] text-slate-500">
+                      {plan.user_ids?.length ? `${plan.user_ids.length} user${plan.user_ids.length === 1 ? '' : 's'}` : `All ${plan.role === 'staff' ? 'staff' : 'teachers'}`}
+                      {' · '}
+                      {plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list (auto)'}
+                      {' · '}
+                      {plan.start_date} → {plan.end_date}
+                    </span>
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => togglePlan(plan)}
+                        className={`rounded-full px-3 py-1 text-[11px] font-extrabold transition ${
+                          plan.active ? 'bg-brand-soft text-brand' : 'bg-slate-200 text-slate-500'
+                        }`}
+                      >
+                        {plan.active ? '● Active' : '⏸ Paused'}
+                      </button>
+                      <button type="button" onClick={() => setEditPlan(plan)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:text-brand">
+                        <i className="fas fa-pen text-[11px]" />
+                      </button>
+                      <button type="button" onClick={() => deletePlan(plan)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:text-red-500">
+                        <i className="fas fa-trash text-[11px]" />
+                      </button>
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* History */}
-      <div className={view === 'assign' ? 'mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Assignment history
-        </p>
-        {!history ? (
-          <p className="py-4 text-center text-[12.5px] text-slate-400">Loading…</p>
-        ) : history.length === 0 ? (
-          <p className="py-4 text-center text-[12.5px] text-slate-400">No tasks assigned yet</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[12.5px]">
-                <thead>
-                  <tr className="border-b border-slate-100 text-[10.5px] uppercase tracking-wide text-slate-400">
-                    <th className="px-2 py-2">User</th>
-                    <th className="px-2 py-2">Task</th>
-                    <th className="px-2 py-2">Due</th>
-                    <th className="px-2 py-2">Assigned</th>
-                    <th className="px-2 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((t) => (
-                    <tr key={t.id} className="border-b border-slate-50">
-                      <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">
-                        {t.users?.name || '—'}
-                        <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${ROLE_BADGE[t.users?.role] || 'bg-slate-100 text-slate-400'}`}>
-                          {t.users?.role || '?'}
-                        </span>
-                      </td>
-                      <td className="max-w-[260px] truncate px-2 py-2 text-slate-600">{t.title}</td>
-                      <td className="whitespace-nowrap px-2 py-2 text-slate-500">
-                        {t.due_at
-                          ? `${new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${formatTaskTime(t.due_at)}`
-                          : '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-2 text-slate-500">
-                        {t.created_at ? new Date(t.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
-                          t.status === 'completed' ? 'bg-brand-soft text-brand' : 'bg-amber-50 text-amber-600'
-                        }`}>
-                          {t.status === 'completed' ? 'Completed' : 'Pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
-            {!historyDone && (
-              <button
-                onClick={() => loadHistory(false)}
-                disabled={historyLoading}
-                className="mt-3 w-full rounded-xl border border-slate-200 py-2 text-[12.5px] font-bold text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
-              >
-                {historyLoading ? 'Loading…' : 'Load more'}
-              </button>
-            )}
-          </>
-        )}
-      </div>
+          )}
 
-      {detailUser && (
-        <UserDetailDialog person={detailUser} onClose={() => setDetailUser(null)} />
+          {/* History */}
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Assignment history
+            </p>
+            {!history ? (
+              <p className="py-4 text-center text-[12.5px] text-slate-400">Loading…</p>
+            ) : history.length === 0 ? (
+              <p className="py-4 text-center text-[12.5px] text-slate-400">No tasks assigned yet</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10.5px] uppercase tracking-wide text-slate-400">
+                        <th className="px-2 py-2">User</th>
+                        <th className="px-2 py-2">Task</th>
+                        <th className="px-2 py-2">Due</th>
+                        <th className="px-2 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((t) => (
+                        <tr key={t.id} className="border-b border-slate-50">
+                          <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">
+                            {t.users?.name || '—'}
+                          </td>
+                          <td className="max-w-[260px] truncate px-2 py-2 text-slate-600">{t.title}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-slate-500">
+                            {t.due_at
+                              ? `${new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${formatTaskTime(t.due_at)}`
+                              : '—'}
+                          </td>
+                          <td className="px-2 py-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
+                              t.status === 'completed' ? 'bg-brand-soft text-brand' : 'bg-amber-50 text-amber-600'
+                            }`}>
+                              {t.status === 'completed' ? 'Completed' : 'Pending'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!historyDone && (
+                  <button
+                    type="button"
+                    onClick={() => loadHistory(false)}
+                    disabled={historyLoading}
+                    className="mt-3 w-full rounded-xl border border-slate-200 py-2 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {historyLoading ? 'Loading…' : 'Load more'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
       )}
+
       {editPlan && (
         <PlanEditDialog
           plan={editPlan}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from '../utils/toast';
 import { api, toArray } from '../api/client';
 
@@ -7,14 +8,12 @@ const ROLES = [
   { key: 'staff', label: 'Staff', plural: 'staff', icon: 'fa-user-tie', color: 'text-kpi-purple', soft: 'bg-violet-50' },
 ];
 
-// Role-based task templates: pick a role, edit its standard task list,
-// save the whole list in one shot (PUT /api/role-tasks/:role).
+// Role-based task templates: pick a role + subject/job role, edit its
+// standard task list, save with PUT /api/role-tasks/:role.
 export default function Tasks() {
   const [role, setRole] = useState('teacher');
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState(''); // '' = whole role
-  const [newCategory, setNewCategory] = useState('');
-  const [addingCategory, setAddingCategory] = useState(false);
   const [tasks, setTasks] = useState(['']);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,7 +37,6 @@ export default function Tasks() {
     }
   };
 
-  // The subject / job list for this role.
   useEffect(() => {
     let live = true;
     api.get(`/api/role-categories?app_role=${role}&active=1`)
@@ -52,23 +50,6 @@ export default function Tasks() {
     load(role, categoryId);
   }, [role, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addCategory = async () => {
-    const name = newCategory.trim();
-    if (!name) return;
-    setAddingCategory(true);
-    try {
-      const created = await api.post('/api/role-categories', { app_role: role, name });
-      setCategories((prev) => [...prev, created]);
-      setCategoryId(created.id);
-      setNewCategory('');
-      toast.success(`"${created.name}" added`);
-    } catch (e) {
-      toast.error(e.message || 'Could not add');
-    } finally {
-      setAddingCategory(false);
-    }
-  };
-
   const update = (i, value) => {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? value : t)));
     setDirty(true);
@@ -77,7 +58,6 @@ export default function Tasks() {
   const addField = () => {
     setTasks((prev) => [...prev, '']);
     setDirty(true);
-    // Focus the new field on the next paint.
     setTimeout(() => lastAdded.current?.focus(), 0);
   };
 
@@ -103,13 +83,16 @@ export default function Tasks() {
 
   const activeRole = ROLES.find((r) => r.key === role);
   const filled = tasks.filter((t) => t.trim()).length;
+  const managePath = role === 'teacher' ? '/teacher-subjects' : '/staff-roles';
+  const manageLabel = role === 'teacher' ? 'Teacher Subjects' : 'Staff Roles';
+  const scopeNoun = role === 'teacher' ? 'subject' : 'staff role';
 
   return (
     <div className="mx-auto max-w-3xl p-5">
       <div className="mb-5">
         <h1 className="text-[22px] font-extrabold text-slate-800">📋 Task Management</h1>
         <p className="text-[13px] text-slate-500">
-          Each role has its own standard task list. Pick a role, add its tasks, then save.
+          Pick Teacher or Staff, choose a {scopeNoun}, then edit that group&apos;s standard tasks.
         </p>
       </div>
 
@@ -134,18 +117,26 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Step 2 — subject / job */}
+      {/* Step 2 — subject / staff role (managed in sidebar sections) */}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Step 2 · {role === 'teacher' ? 'Select the lesson' : 'Select the work type'}
-        </p>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Step 2 · {role === 'teacher' ? 'Select the subject' : 'Select the staff role'}
+          </p>
+          <Link
+            to={managePath}
+            className="text-[11.5px] font-bold text-brand hover:underline"
+          >
+            Manage {manageLabel} →
+          </Link>
+        </div>
         <select
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
           className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[14px] font-semibold text-slate-700 outline-none focus:border-brand"
         >
           <option value="">
-            {role === 'teacher' ? 'All teachers (any lesson)' : 'All staff (any work type)'}
+            {role === 'teacher' ? 'All teachers (any subject)' : 'All staff (any staff role)'}
           </option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -153,25 +144,17 @@ export default function Tasks() {
             </option>
           ))}
         </select>
-
-        <div className="mt-2 flex gap-2">
-          <input
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
-            placeholder={role === 'teacher' ? 'Add a lesson — e.g. Geography' : 'Add a work type — e.g. Driver'}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 text-[13px] outline-none focus:border-brand"
-          />
-          <button
-            onClick={addCategory}
-            disabled={addingCategory || !newCategory.trim()}
-            className="shrink-0 rounded-xl border-2 border-dashed border-slate-200 px-4 text-[12.5px] font-bold text-slate-400 transition hover:border-brand/40 hover:text-brand disabled:opacity-40"
-          >
-            <i className="fas fa-plus mr-1.5" />{addingCategory ? 'Adding…' : 'Add'}
-          </button>
-        </div>
+        {categories.length === 0 && (
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+            No {scopeNoun}s yet.{' '}
+            <Link to={managePath} className="font-bold underline">
+              Add them in {manageLabel}
+            </Link>
+            .
+          </p>
+        )}
         <p className="mt-1.5 text-[11px] text-slate-400">
-          Tasks saved under a {role === 'teacher' ? 'lesson' : 'work type'} go only to those people.
+          Tasks saved under a {scopeNoun} go only to those people.
           Choose “All …” for tasks everyone in the role should do.
         </p>
       </div>

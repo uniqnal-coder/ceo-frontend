@@ -76,10 +76,12 @@ export default function Staff() {
       <div style={styles.header} className="page-header">
         <div>
           <h2 className="flex items-center gap-2 text-[20px] font-extrabold text-slate-800">
-            <i className="fas fa-user-plus text-brand" />
-            Add Staff
+            <i className="fas fa-users text-brand" />
+            Teachers &amp; Staff
           </h2>
-          <p style={styles.subtitle} className="page-subtitle">View all users and add new staff members</p>
+          <p style={styles.subtitle} className="page-subtitle">
+            Manage teachers (with subjects) and staff (with job roles)
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -95,7 +97,7 @@ export default function Staff() {
             className="add-button inline-flex items-center gap-2"
           >
             <i className="fas fa-plus" />
-            Add Staff Member
+            Add person
           </button>
         </div>
       </div>
@@ -126,14 +128,14 @@ export default function Staff() {
 
       {!loading && visibleStaff.length === 0 && !error && (
         <div style={styles.empty} className="empty-state">
-          <p>📋 No staff members found</p>
+          <p>📋 No people found</p>
           <button
             onClick={() => setShowForm(true)}
             style={styles.emptyButton}
             className="inline-flex items-center gap-2"
           >
             <i className="fas fa-plus" />
-            Add First Staff Member
+            Add first person
           </button>
         </div>
       )}
@@ -144,13 +146,11 @@ export default function Staff() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Age</th>
-                <th>Role</th>
+                <th>Type</th>
+                <th>Subject / Staff role</th>
                 <th>Department</th>
                 <th>Salary</th>
                 <th>Phone</th>
-                <th>Certificate</th>
-                <th>App</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -159,7 +159,15 @@ export default function Staff() {
               {visibleStaff.map(member => (
                 <tr key={member.id}>
                   <td style={styles.nameCell}>{member.name}</td>
-                  <td>{member.age ?? <EmptyCell />}</td>
+                  <td>
+                    {appRoleOf(member) === 'teacher' ? (
+                      <span className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher</span>
+                    ) : appRoleOf(member) === 'staff' ? (
+                      <span className="whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-600">Staff</span>
+                    ) : (
+                      <span className="text-[11px] text-slate-300">—</span>
+                    )}
+                  </td>
                   <td>{member.role || <EmptyCell />}</td>
                   <td>{member.department || <EmptyCell />}</td>
                   <td style={member.salary != null && member.salary !== '' ? styles.salaryCell : undefined}>
@@ -168,16 +176,6 @@ export default function Staff() {
                       : <EmptyCell />}
                   </td>
                   <td>{member.phone || <EmptyCell />}</td>
-                  <td>{member.certificate || <EmptyCell />}</td>
-                  <td>
-                    {appRoleOf(member) === 'teacher' ? (
-                      <span className="whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5 text-[10.5px] font-bold text-violet-600">Teacher app</span>
-                    ) : appRoleOf(member) === 'staff' ? (
-                      <span className="whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-[10.5px] font-bold text-sky-600">Staff app</span>
-                    ) : (
-                      <span className="text-[11px] text-slate-300">—</span>
-                    )}
-                  </td>
                   <td>
                     <span style={{
                       ...styles.badge,
@@ -223,17 +221,7 @@ export default function Staff() {
   )
 }
 
-const FALLBACK_ROLES = [
-  'Teacher',
-  'Professor',
-  'Lecturer',
-  'Assistant Professor',
-  'Admin',
-  'Coordinator',
-]
-
 function StaffForm({ staff, onClose }) {
-  const [roleOptions, setRoleOptions] = useState(FALLBACK_ROLES)
   const [formData, setFormData] = useState({
     name: staff?.name || '',
     age: staff?.age || '',
@@ -246,14 +234,19 @@ function StaffForm({ staff, onClose }) {
     status: staff?.status || 'Active',
     email: staff?.email || '',
     app_role: staff?.users?.role || 'teacher',
-    category_id: staff?.category_id || ''
+    category_id: staff?.category_id || '',
   })
   const [categories, setCategories] = useState([])
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
   const [account, setAccount] = useState(null)
 
-  // Lessons (teacher) / work types (staff) for the chosen app type.
+  const isTeacher = formData.app_role === 'teacher'
+  const categoryLabel = isTeacher ? 'Subject' : 'Staff role'
+  const managePath = isTeacher ? '/teacher-subjects' : '/staff-roles'
+  const manageLabel = isTeacher ? 'Subjects' : 'Staff Roles'
+
+  // Load subjects (teacher) or staff roles (staff) for the selected type.
   useEffect(() => {
     let live = true
     api
@@ -262,63 +255,77 @@ function StaffForm({ staff, onClose }) {
         if (!live) return
         const list = Array.isArray(rows) ? rows : []
         setCategories(list)
-        setFormData((prev) =>
-          list.some((c) => c.id === prev.category_id) ? prev : { ...prev, category_id: '' }
-        )
-      })
-      .catch(() => { if (live) setCategories([]) })
-    return () => { live = false }
-  }, [formData.app_role]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    let live = true
-    api
-      .get('/api/hr-roles?active=1')
-      .then((data) => {
-        if (!live) return
-        const names = (data.roles || []).map((r) => r.name).filter(Boolean)
-        if (!names.length) return
-        setRoleOptions(names)
         setFormData((prev) => {
-          if (names.includes(prev.role)) return prev
-          return { ...prev, role: names[0] }
+          if (list.some((c) => c.id === prev.category_id)) return prev
+          return { ...prev, category_id: '' }
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        if (live) setCategories([])
+      })
     return () => {
       live = false
     }
-  }, [])
+  }, [formData.app_role])
+
+  const setAppRole = (app_role) => {
+    setFormData((prev) => ({
+      ...prev,
+      app_role,
+      category_id: '',
+      role: app_role === 'teacher' ? 'Teacher' : 'Staff',
+    }))
+  }
+
+  const setCategory = (category_id) => {
+    const cat = categories.find((c) => c.id === category_id)
+    setFormData((prev) => ({
+      ...prev,
+      category_id,
+      // Keep profile.role in sync with subject / staff role name for lists.
+      role: cat?.name || (prev.app_role === 'teacher' ? 'Teacher' : 'Staff'),
+    }))
+  }
 
   const validateField = (field, value) => {
     const error = getValidationError(field, value)
-    setErrors(prev => ({
-      ...prev,
-      [field]: error
-    }))
+    setErrors((prev) => ({ ...prev, [field]: error }))
     return !error
   }
 
   const handleFieldChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
     validateField(field, value)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Validate all required fields
+
     const validation = validateForm(formData, ['name', 'department'])
-    
-    // Validate optional fields if they have values
     if (formData.phone) validateField('phone', formData.phone)
     if (formData.age) validateField('age', formData.age)
     if (formData.salary) validateField('salary', formData.salary)
-    
+
+    if (!formData.category_id) {
+      setErrors((prev) => ({
+        ...prev,
+        ...validation.errors,
+        category_id: `Please select a ${categoryLabel.toLowerCase()}`,
+      }))
+      toast.error(`Select a ${categoryLabel.toLowerCase()} first`)
+      return
+    }
+
     if (!validation.isValid) {
       setErrors(validation.errors)
       toast.error('Please fix validation errors')
       return
+    }
+
+    const cat = categories.find((c) => c.id === formData.category_id)
+    const payload = {
+      ...formData,
+      role: cat?.name || formData.role || (isTeacher ? 'Teacher' : 'Staff'),
     }
 
     setSaving(true)
@@ -326,28 +333,28 @@ function StaffForm({ staff, onClose }) {
 
     try {
       if (staff) {
-        await api.put(`/api/staff/${staff.id}`, formData)
-        toast.success('Staff member updated successfully')
+        await api.put(`/api/staff/${staff.id}`, payload)
+        toast.success(isTeacher ? 'Teacher updated' : 'Staff member updated')
         onClose()
       } else {
-        const created = await api.post('/api/staff', formData)
+        const created = await api.post('/api/staff', payload)
         if (created?.account?.tempPassword) {
           if (created.account.emailSent) {
-            toast.success('Staff added — login email sent')
+            toast.success('Saved — login email sent')
           } else {
             toast.error(
               created.account.emailError
-                ? `Staff saved but email failed: ${created.account.emailError}`
-                : 'Staff saved but login email was not sent'
+                ? `Saved but email failed: ${created.account.emailError}`
+                : 'Saved but login email was not sent'
             )
           }
           setAccount(created.account)
           return
         }
         if (created?.account?.existing) {
-          toast.success('Staff linked to an existing app login')
+          toast.success('Linked to an existing app login')
         } else {
-          toast.success('Staff member added successfully')
+          toast.success(isTeacher ? 'Teacher added' : 'Staff member added')
         }
         onClose()
       }
@@ -365,20 +372,106 @@ function StaffForm({ staff, onClose }) {
   return (
     <div style={styles.formContainer}>
       <div style={styles.formCard}>
-        <h2>{staff ? '✏️ Edit Staff Member' : '➕ Add New Staff Member'}</h2>
-        
+        <h2>{staff ? 'Edit person' : 'Add teacher or staff'}</h2>
+        <p className="mb-4 text-[13px] text-slate-500">
+          Choose Teacher or Staff first, then pick their {isTeacher ? 'subject' : 'job role'}.
+        </p>
+
         <form onSubmit={handleSubmit} style={styles.form}>
+          {/* Type */}
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              1 · Type
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { key: 'teacher', label: 'Teacher', hint: 'Subjects & attendance', icon: 'fa-person-chalkboard' },
+                { key: 'staff', label: 'Staff', hint: 'Jobs & daily tasks', icon: 'fa-user-tie' },
+              ].map((opt) => {
+                const on = formData.app_role === opt.key
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setAppRole(opt.key)}
+                    className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition ${
+                      on
+                        ? 'border-brand bg-white shadow-sm ring-1 ring-brand/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                        opt.key === 'teacher' ? 'bg-violet-50 text-violet-600' : 'bg-sky-50 text-sky-600'
+                      }`}
+                    >
+                      <i className={`fas ${opt.icon}`} />
+                    </span>
+                    <span>
+                      <span className="block text-[14px] font-extrabold text-slate-800">{opt.label}</span>
+                      <span className="block text-[11px] text-slate-400">{opt.hint}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Subject / Staff role */}
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                2 · {categoryLabel}
+              </p>
+              <Link to={managePath} className="text-[11.5px] font-bold text-brand hover:underline">
+                Manage {manageLabel} →
+              </Link>
+            </div>
+            <select
+              value={formData.category_id}
+              onChange={(e) => setCategory(e.target.value)}
+              required
+              style={{
+                ...styles.input,
+                borderColor: errors.category_id ? '#ef4444' : '#d1d5db',
+              }}
+            >
+              <option value="">
+                {isTeacher ? 'Select subject — e.g. Mathematics' : 'Select staff role — e.g. Security Guard'}
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {errors.category_id && <span style={styles.errorText}>{errors.category_id}</span>}
+            {categories.length === 0 && (
+              <p className="mt-2 text-[12px] text-amber-700">
+                No {categoryLabel.toLowerCase()}s yet.{' '}
+                <Link to={managePath} className="font-bold underline">
+                  Add them in {manageLabel}
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+
+          {/* Identity */}
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            3 · Personal details
+          </p>
           <div style={styles.formRow}>
             <div style={styles.formGroup}>
-              <label>Full Name *</label>
+              <label>Full name *</label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={e => handleFieldChange('name', e.target.value)}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
                 required
                 style={{
                   ...styles.input,
-                  borderColor: errors.name ? '#ef4444' : '#d1d5db'
+                  borderColor: errors.name ? '#ef4444' : '#d1d5db',
                 }}
               />
               {errors.name && <span style={styles.errorText}>{errors.name}</span>}
@@ -388,10 +481,10 @@ function StaffForm({ staff, onClose }) {
               <input
                 type="number"
                 value={formData.age}
-                onChange={e => handleFieldChange('age', e.target.value)}
+                onChange={(e) => handleFieldChange('age', e.target.value)}
                 style={{
                   ...styles.input,
-                  borderColor: errors.age ? '#ef4444' : '#d1d5db'
+                  borderColor: errors.age ? '#ef4444' : '#d1d5db',
                 }}
               />
               {errors.age && <span style={styles.errorText}>{errors.age}</span>}
@@ -404,103 +497,57 @@ function StaffForm({ staff, onClose }) {
               <input
                 type="email"
                 value={formData.email}
-                onChange={e => setFormData({...formData, email: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="person@school.com"
                 required={!staff}
                 style={styles.input}
               />
             </div>
             <div style={styles.formGroup}>
-              <label>App type</label>
-              <select
-                value={formData.app_role}
-                onChange={e => setFormData({...formData, app_role: e.target.value})}
-                style={styles.input}
-              >
-                <option value="teacher">Teacher app (lessons, attendance)</option>
-                <option value="staff">Staff app (tasks, reports)</option>
-              </select>
+              <label>Phone</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => handleFieldChange('phone', e.target.value)}
+                placeholder="07XX XXX XXXX"
+                style={{
+                  ...styles.input,
+                  borderColor: errors.phone ? '#ef4444' : '#d1d5db',
+                }}
+              />
+              {errors.phone && <span style={styles.errorText}>{errors.phone}</span>}
             </div>
           </div>
 
-          <div style={styles.formRow}>
-            <div style={styles.formGroup}>
-              <label>
-                Role{' '}
-                <Link to="/roles" style={{ fontSize: 11, fontWeight: 600, color: '#0d9488' }}>
-                  Manage roles
-                </Link>
-              </label>
-              <select
-                value={formData.role}
-                onChange={e => setFormData({...formData, role: e.target.value})}
-                style={styles.input}
-              >
-                {!roleOptions.includes(formData.role) && formData.role && (
-                  <option value={formData.role}>{formData.role}</option>
-                )}
-                {roleOptions.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label>{formData.app_role === 'teacher' ? 'Lesson' : 'Work type'}</label>
-              <select
-                value={formData.category_id}
-                onChange={e => setFormData({...formData, category_id: e.target.value})}
-                style={styles.input}
-              >
-                <option value="">— none —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
+          {/* Work */}
+          <p className="mb-2 mt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            4 · Work details
+          </p>
           <div style={styles.formRow}>
             <div style={styles.formGroup}>
               <label>Department *</label>
               <input
                 type="text"
                 value={formData.department}
-                onChange={e => handleFieldChange('department', e.target.value)}
+                onChange={(e) => handleFieldChange('department', e.target.value)}
                 required
                 style={{
                   ...styles.input,
-                  borderColor: errors.department ? '#ef4444' : '#d1d5db'
+                  borderColor: errors.department ? '#ef4444' : '#d1d5db',
                 }}
               />
               {errors.department && <span style={styles.errorText}>{errors.department}</span>}
-            </div>
-          </div>
-
-          <div style={styles.formRow}>
-            <div style={styles.formGroup}>
-              <label>Phone</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={e => handleFieldChange('phone', e.target.value)}
-                placeholder="07XX XXX XXXX"
-                style={{
-                  ...styles.input,
-                  borderColor: errors.phone ? '#ef4444' : '#d1d5db'
-                }}
-              />
-              {errors.phone && <span style={styles.errorText}>{errors.phone}</span>}
             </div>
             <div style={styles.formGroup}>
               <label>Salary</label>
               <input
                 type="number"
                 value={formData.salary}
-                onChange={e => handleFieldChange('salary', e.target.value)}
+                onChange={(e) => handleFieldChange('salary', e.target.value)}
                 placeholder="0"
                 style={{
                   ...styles.input,
-                  borderColor: errors.salary ? '#ef4444' : '#d1d5db'
+                  borderColor: errors.salary ? '#ef4444' : '#d1d5db',
                 }}
               />
               {errors.salary && <span style={styles.errorText}>{errors.salary}</span>}
@@ -513,16 +560,16 @@ function StaffForm({ staff, onClose }) {
               <input
                 type="text"
                 value={formData.certificate}
-                onChange={e => setFormData({...formData, certificate: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, certificate: e.target.value })}
                 style={styles.input}
-                placeholder="e.g., PhD Computer Science"
+                placeholder={isTeacher ? 'e.g. B.Ed Mathematics' : 'e.g. Security certificate'}
               />
             </div>
             <div style={styles.formGroup}>
               <label>Level</label>
               <select
                 value={formData.stage}
-                onChange={e => setFormData({...formData, stage: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
                 style={styles.input}
               >
                 <option>Junior</option>
@@ -536,7 +583,7 @@ function StaffForm({ staff, onClose }) {
             <label>Status</label>
             <select
               value={formData.status}
-              onChange={e => setFormData({...formData, status: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               style={styles.input}
             >
               <option>Active</option>
@@ -550,7 +597,7 @@ function StaffForm({ staff, onClose }) {
               Cancel
             </button>
             <button type="submit" disabled={saving} style={styles.saveBtn}>
-              {saving ? 'Saving...' : (staff ? 'Update Staff' : 'Add Staff')}
+              {saving ? 'Saving…' : staff ? 'Save changes' : isTeacher ? 'Add teacher' : 'Add staff'}
             </button>
           </div>
         </form>

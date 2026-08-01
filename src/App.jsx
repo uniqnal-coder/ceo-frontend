@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Staff from './pages/Staff';
 import Roles from './pages/Roles';
+import RoleCategories from './pages/RoleCategories';
 import Archive from './pages/Archive';
 import Tasks from './pages/Tasks';
 import AutoTask from './pages/AutoTask';
@@ -27,6 +28,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/staff" element={<Staff />} />
           <Route path="/roles" element={<Roles />} />
+          <Route path="/teacher-subjects" element={<RoleCategories appRole="teacher" />} />
+          <Route path="/staff-roles" element={<RoleCategories appRole="staff" />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/auto-task" element={<AutoTask />} />

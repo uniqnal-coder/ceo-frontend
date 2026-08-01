@@ -17,11 +17,27 @@ export const navGroups = [
     ],
   },
   {
-    title: 'HR Management',
+    title: 'People',
     items: [
-      { to: '/staff', label: 'Add Staff', short: 'Staff', icon: 'fa-user-plus' },
-      { to: '/roles', label: 'Roles', short: 'Roles', icon: 'fa-user-tag' },
+      { to: '/staff', label: 'Teachers & Staff', short: 'People', icon: 'fa-users' },
       { to: '/archive', label: 'Archive', short: 'Archive', icon: 'fa-box-archive' },
+    ],
+  },
+  {
+    title: 'Teachers',
+    items: [
+      { to: '/teacher-subjects', label: 'Subjects', short: 'Subjects', icon: 'fa-book-open' },
+    ],
+  },
+  {
+    title: 'Staff',
+    items: [
+      { to: '/staff-roles', label: 'Staff Roles', short: 'Roles', icon: 'fa-briefcase' },
+    ],
+  },
+  {
+    title: 'Tasks',
+    items: [
       { to: '/tasks', label: 'Add Task', short: 'Tasks', icon: 'fa-clipboard-check' },
       { to: '/auto-task', label: 'Assign Task', short: 'Assign', icon: 'fa-wand-magic-sparkles' },
     ],
