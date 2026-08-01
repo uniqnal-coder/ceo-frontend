@@ -11,6 +11,10 @@ const ROLES = [
 // save the whole list in one shot (PUT /api/role-tasks/:role).
 export default function Tasks() {
   const [role, setRole] = useState('teacher');
+  const [categories, setCategories] = useState([]);
+  const [categoryId, setCategoryId] = useState(''); // '' = whole role
+  const [newCategory, setNewCategory] = useState('');
+  const [addingCategory, setAddingCategory] = useState(false);
   const [tasks, setTasks] = useState(['']);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,11 +22,12 @@ export default function Tasks() {
   const [error, setError] = useState('');
   const lastAdded = useRef(null);
 
-  const load = async (r) => {
+  const load = async (r, cat) => {
     setLoading(true);
     setError('');
     try {
-      const rows = toArray(await api.get(`/api/role-tasks?role=${r}`));
+      const scope = cat ? `&category_id=${cat}` : '&category_id=none';
+      const rows = toArray(await api.get(`/api/role-tasks?role=${r}${scope}`));
       setTasks(rows.length ? rows.map((t) => t.title) : ['']);
       setDirty(false);
     } catch (e) {
@@ -33,9 +38,36 @@ export default function Tasks() {
     }
   };
 
+  // The subject / job list for this role.
   useEffect(() => {
-    load(role);
+    let live = true;
+    api.get(`/api/role-categories?app_role=${role}&active=1`)
+      .then((rows) => { if (live) setCategories(toArray(rows)); })
+      .catch(() => { if (live) setCategories([]); });
+    setCategoryId('');
+    return () => { live = false; };
   }, [role]);
+
+  useEffect(() => {
+    load(role, categoryId);
+  }, [role, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    setAddingCategory(true);
+    try {
+      const created = await api.post('/api/role-categories', { app_role: role, name });
+      setCategories((prev) => [...prev, created]);
+      setCategoryId(created.id);
+      setNewCategory('');
+      toast.success(`"${created.name}" added`);
+    } catch (e) {
+      toast.error(e.message || 'Could not add');
+    } finally {
+      setAddingCategory(false);
+    }
+  };
 
   const update = (i, value) => {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? value : t)));
@@ -58,7 +90,7 @@ export default function Tasks() {
     const titles = tasks.map((t) => t.trim()).filter(Boolean);
     setSaving(true);
     try {
-      const saved = toArray(await api.put(`/api/role-tasks/${role}`, { tasks: titles }));
+      const saved = toArray(await api.put(`/api/role-tasks/${role}`, { tasks: titles, category_id: categoryId || null }));
       setTasks(saved.length ? saved.map((t) => t.title) : ['']);
       setDirty(false);
       toast.success(`Saved ${saved.length} task${saved.length === 1 ? '' : 's'} for ${ROLES.find((r) => r.key === role).plural}`);
@@ -102,11 +134,55 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Step 2 — tasks */}
+      {/* Step 2 — subject / job */}
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Step 2 · {role === 'teacher' ? 'Select the lesson' : 'Select the work type'}
+        </p>
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[14px] font-semibold text-slate-700 outline-none focus:border-brand"
+        >
+          <option value="">
+            {role === 'teacher' ? 'All teachers (any lesson)' : 'All staff (any work type)'}
+          </option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.staff_count ? ` · ${c.staff_count} people` : ''}
+            </option>
+          ))}
+        </select>
+
+        <div className="mt-2 flex gap-2">
+          <input
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+            placeholder={role === 'teacher' ? 'Add a lesson — e.g. Geography' : 'Add a work type — e.g. Driver'}
+            className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 text-[13px] outline-none focus:border-brand"
+          />
+          <button
+            onClick={addCategory}
+            disabled={addingCategory || !newCategory.trim()}
+            className="shrink-0 rounded-xl border-2 border-dashed border-slate-200 px-4 text-[12.5px] font-bold text-slate-400 transition hover:border-brand/40 hover:text-brand disabled:opacity-40"
+          >
+            <i className="fas fa-plus mr-1.5" />{addingCategory ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+        <p className="mt-1.5 text-[11px] text-slate-400">
+          Tasks saved under a {role === 'teacher' ? 'lesson' : 'work type'} go only to those people.
+          Choose “All …” for tasks everyone in the role should do.
+        </p>
+      </div>
+
+      {/* Step 3 — tasks */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Step 2 · Tasks for {activeRole.plural}
+            Step 3 · Tasks for {categoryId
+              ? categories.find((c) => c.id === categoryId)?.name || activeRole.plural
+              : `all ${activeRole.plural}`}
           </p>
           <span className="text-[11px] font-semibold text-slate-400">
             {filled} task{filled === 1 ? '' : 's'}
