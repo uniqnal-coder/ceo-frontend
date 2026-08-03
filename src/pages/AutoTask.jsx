@@ -769,6 +769,46 @@ export default function AutoTask() {
                   </p>
                 ) : period === 'daily' ? (
                   <div className="max-h-72 space-y-1.5 overflow-y-auto rounded-xl bg-[#eff6ff] p-3">
+                    {/* Master toggle — only counts tasks that can still be
+                        sent, so "already sent" ones never block it. */}
+                    {(() => {
+                      const selectable = roleTasks.filter(
+                        (t) => !already.get(t.title)?.has(employeeId)
+                      );
+                      const allOn =
+                        selectable.length > 0 &&
+                        selectable.every((t) => selected.has(t.title));
+                      const someOn = selectable.some((t) => selected.has(t.title));
+                      return (
+                        <label className="mb-1 flex cursor-pointer items-center gap-2.5 rounded-lg border-b border-blue-100 px-2 pb-2 hover:bg-white/70">
+                          <input
+                            type="checkbox"
+                            checked={allOn}
+                            ref={(el) => {
+                              if (el) el.indeterminate = !allOn && someOn;
+                            }}
+                            disabled={selectable.length === 0}
+                            onChange={() =>
+                              setSelected((prev) => {
+                                const next = new Set(prev);
+                                for (const t of selectable) {
+                                  if (allOn) next.delete(t.title);
+                                  else next.add(t.title);
+                                }
+                                return next;
+                              })
+                            }
+                            className="h-4 w-4 accent-[#2563eb]"
+                          />
+                          <span className="text-[12.5px] font-extrabold text-slate-600">
+                            {allOn ? 'Deselect all' : 'Select all'}
+                          </span>
+                          <span className="ml-auto text-[11px] font-bold text-slate-400">
+                            {selectable.filter((t) => selected.has(t.title)).length}/{selectable.length}
+                          </span>
+                        </label>
+                      );
+                    })()}
                     {roleTasks.map((t) => {
                       const on = selected.has(t.title);
                       const have = already.get(t.title)?.has(employeeId);
