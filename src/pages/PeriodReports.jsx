@@ -386,6 +386,8 @@ function PersonDetail({ person, period, rangeLabel, onClose }) {
         </div>
       )}
 
+      <SubmittedReports userId={person.id} period={period} />
+
       <TaskSection title="Overdue" rows={person.tasks?.overdue} empty="None overdue" danger />
       <TaskSection title="Pending" rows={person.tasks?.pending} empty="None pending" />
       <TaskSection title="Completed" rows={person.tasks?.completed} empty="None completed" done />
@@ -402,6 +404,160 @@ function PersonDetail({ person, period, rangeLabel, onClose }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+const URL_RE = /https?:\/\/\S+/g
+const ATTACHMENT_RE = /\[attachment:([^\]]+)\]/g
+const isImage = (u) => /\.(jpe?g|png|webp|gif)(\?|$)/i.test(u)
+const isAudio = (u) => /\.(m4a|aac|mp3|wav|ogg|webm)(\?|$)/i.test(u)
+
+/** Storage is private — swap a storage path for a short-lived signed URL. */
+function useSignedUrls(paths) {
+  const key = paths.join('|')
+  const [urls, setUrls] = useState({})
+
+  useEffect(() => {
+    let live = true
+    if (!key) {
+      setUrls({})
+      return undefined
+    }
+    Promise.all(
+      key.split('|').map((p) =>
+        api
+          .get(`/api/uploads/signed?path=${encodeURIComponent(p)}`)
+          .then((d) => [p, d?.url || ''])
+          .catch(() => [p, ''])
+      )
+    ).then((pairs) => live && setUrls(Object.fromEntries(pairs)))
+    return () => {
+      live = false
+    }
+  }, [key])
+
+  return urls
+}
+
+/**
+ * Written / photo / voice reports the person submitted from the app
+ * (`daily_reports`). Attachments arrive as links inside the text, so pull them
+ * out and show the photo and play the voice note here.
+ */
+function SubmittedReports({ userId, period }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    setRows(null)
+    setError('')
+    api
+      .get(`/api/daily-reports/user/${userId}?limit=${period === 'daily' ? 3 : 30}`)
+      .then((d) => live && setRows(Array.isArray(d) ? d : d?.data || []))
+      .catch((err) => live && setError(err.message))
+    return () => {
+      live = false
+    }
+  }, [userId, period])
+
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+        Submitted Reports
+      </p>
+      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-[12px] text-danger">{error}</p>}
+      {!rows && !error && (
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-400">Loading…</p>
+      )}
+      {rows?.length === 0 && (
+        <p className="rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-400">
+          No reports submitted
+        </p>
+      )}
+      <div className="max-h-72 space-y-2 overflow-y-auto">
+        {(rows || []).map((r) => (
+          <ReportCard key={r.id} report={r} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReportCard({ report }) {
+  const text = report.content || ''
+  // Attachments come as `[attachment:<storage path>]`; older reports may still
+  // carry raw links.
+  const paths = useMemo(
+    () => [...text.matchAll(ATTACHMENT_RE)].map((m) => m[1].trim()),
+    [text]
+  )
+  const signed = useSignedUrls(paths)
+
+  // Classify by the original name (the signed URL has query params), keeping
+  // raw-link attachments from older reports working too.
+  const items = [
+    ...paths.map((p) => ({ name: p, url: signed[p] })),
+    ...(text.match(URL_RE) || []).map((u) => ({ name: u, url: u })),
+  ]
+  const ready = items.filter((it) => it.url)
+  const images = ready.filter((it) => isImage(it.name))
+  const audios = ready.filter((it) => isAudio(it.name))
+  const files = ready.filter((it) => !isImage(it.name) && !isAudio(it.name))
+  const pending = items.length - ready.length
+  const prose = text
+    .replace(ATTACHMENT_RE, '')
+    .replace(URL_RE, '')
+    .replace(/^[ \t]*(📷 Image:|🎙 Voice report:)[ \t]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-slate-500">
+          {String(report.date || '').slice(0, 10)}
+        </span>
+        {report.tasks_total > 0 && (
+          <span className="rounded-full bg-white px-2 py-0.5 text-[10.5px] font-semibold text-slate-500">
+            {report.tasks_completed}/{report.tasks_total} tasks
+          </span>
+        )}
+      </div>
+      {prose && (
+        <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-slate-600">{prose}</p>
+      )}
+      {pending > 0 && (
+        <p className="mt-2 text-[11.5px] text-slate-400">Loading {pending} attachment(s)…</p>
+      )}
+      {images.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {images.map((it) => (
+            <a key={it.name} href={it.url} target="_blank" rel="noreferrer">
+              <img
+                src={it.url}
+                alt="Report attachment"
+                className="h-20 w-20 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+      {audios.map((it) => (
+        <audio key={it.name} controls preload="none" src={it.url} className="mt-2 h-9 w-full" />
+      ))}
+      {files.map((it) => (
+        <a
+          key={it.name}
+          href={it.url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 block truncate text-[12px] font-semibold text-brand hover:underline"
+        >
+          📎 {it.name}
+        </a>
+      ))}
     </div>
   )
 }
