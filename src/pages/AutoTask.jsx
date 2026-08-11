@@ -226,19 +226,17 @@ export default function AutoTask() {
   /** Weekly/monthly: { 'YYYY-MM-DD': string[] } titles scheduled that day. */
   const [dayPlan, setDayPlan] = useState({});
 
-  const dueDate = useMemo(() => {
-    const maxDay = daysInMonth(year, month);
-    const d = Math.min(day, maxDay);
-    return `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  }, [year, month, day]);
+  // Customize Selected Tasks panel (mockup layout): a date range, explicit
+  // start/deadline times, and repeats-on weekdays.
+  const [rangeFrom, setRangeFrom] = useState(todayISO());
+  const [rangeTo, setRangeTo] = useState('');
+  const [dueHour12, setDueHour12] = useState(5);
+  const [dueAmpm, setDueAmpm] = useState('PM');
+  const [repeatDays, setRepeatDays] = useState(new Set());
 
+  const dueDate = rangeFrom;
   const startTime = useMemo(() => to24h(hour12, minute, ampm), [hour12, minute, ampm]);
-  const dueTime = useMemo(() => {
-    // Deadline = start + 8 hours (capped at 23:59)
-    const [h, m] = startTime.split(':').map(Number);
-    const endH = Math.min(h + 8, 23);
-    return `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }, [startTime]);
+  const dueTime = useMemo(() => to24h(dueHour12, 0, dueAmpm), [dueHour12, dueAmpm]);
 
   const dates = useMemo(
     () => computeDates(scheduleMode, dueDate, dueDate, yearEndISO(), period),
@@ -446,7 +444,8 @@ export default function AutoTask() {
     });
   };
 
-  const recurring = scheduleMode === 'recurring';
+  // An end date after the start, or any weekday picked, means a plan.
+  const recurring = (!!rangeTo && rangeTo !== rangeFrom) || repeatDays.size > 0;
   const usingList = recurring && followList;
   const scheduledSlotCount = useMemo(
     () => Object.values(dayPlan).reduce((n, t) => n + (t?.length || 0), 0),
@@ -489,6 +488,10 @@ export default function AutoTask() {
     }
     if (period !== 'daily' && !assignments.length) {
       toast.error(`Tap tasks under each day to schedule them`);
+      return;
+    }
+    if (startTime >= dueTime) {
+      toast.error('Deadline must be after start time');
       return;
     }
     setSaving(true);
@@ -585,11 +588,11 @@ export default function AutoTask() {
           period,
           user_ids: [employeeId],
           titles: useBuckets ? allDayTitles : (usingList ? [] : titles),
-          repeat: useBuckets ? 'custom' : period,
-          weekdays: useBuckets ? [...new Set(weekdays)] : [],
+          repeat: useBuckets ? 'custom' : (repeatDays.size ? 'custom' : 'daily'),
+          weekdays: useBuckets ? [...new Set(weekdays)] : [...repeatDays].sort(),
           day_titles: useBuckets ? day_titles : undefined,
-          start_date: dueDate,
-          end_date: yearEndISO(),
+          start_date: rangeFrom,
+          end_date: rangeTo || yearEndISO(),
           start_time: startTime,
           due_time: dueTime,
         });
@@ -842,141 +845,97 @@ export default function AutoTask() {
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div className="mb-4 flex items-center gap-2">
                   <i className="fas fa-calendar-days text-[#2563eb]" />
-                  <h3 className="text-[15px] font-extrabold text-slate-800">Date &amp; Time</h3>
+                  <h3 className="text-[15px] font-extrabold text-slate-800">Customize Selected Tasks</h3>
                 </div>
 
-                <div className="mb-3 flex flex-wrap gap-1.5">
-                  {PERIODS.map((p) => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => setPeriod(p.key)}
-                      className={`rounded-lg border px-3 py-1.5 text-[12px] font-bold transition ${
-                        period === p.key
-                          ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
-                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                      }`}
+                <p className="mb-1.5 text-[12.5px] font-extrabold text-slate-700">Recurring date Range:</p>
+                <div className="mb-4 flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={rangeFrom}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3 text-[13px] font-bold text-slate-700 outline-none transition focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                  />
+                  <span className="text-[12px] font-bold text-slate-400">to</span>
+                  <input
+                    type="date"
+                    value={rangeTo}
+                    min={rangeFrom || undefined}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/80 px-3 text-[13px] font-bold text-slate-700 outline-none transition focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
+                  />
+                </div>
+
+                <p className="mb-1.5 text-[12.5px] font-extrabold text-slate-700">Recurring Time:</p>
+                <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span className="text-[12px] font-bold text-slate-500">Start</span>
+                  <span className="inline-flex overflow-hidden rounded-xl border border-slate-200">
+                    <select
+                      value={hour12}
+                      onChange={(e) => setHour12(Number(e.target.value))}
+                      className="h-10 bg-white px-2 text-[13px] font-bold text-slate-700 outline-none"
                     >
-                      {p.label}
-                    </button>
+                      {hourOptions.map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                    <select
+                      value={ampm}
+                      onChange={(e) => setAmpm(e.target.value)}
+                      className="h-10 border-l border-slate-200 bg-slate-50 px-2 text-[13px] font-bold text-slate-700 outline-none"
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </span>
+                  <span className="text-[12px] font-bold text-slate-500">Deadline</span>
+                  <span className="inline-flex overflow-hidden rounded-xl border border-slate-200">
+                    <select
+                      value={dueHour12}
+                      onChange={(e) => setDueHour12(Number(e.target.value))}
+                      className="h-10 bg-white px-2 text-[13px] font-bold text-slate-700 outline-none"
+                    >
+                      {hourOptions.map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                    <select
+                      value={dueAmpm}
+                      onChange={(e) => setDueAmpm(e.target.value)}
+                      className="h-10 border-l border-slate-200 bg-slate-50 px-2 text-[13px] font-bold text-slate-700 outline-none"
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </span>
+                </div>
+
+                <p className="mb-1.5 text-[12.5px] font-extrabold text-slate-700">Repeats on:</p>
+                <div className="mb-1 flex flex-wrap gap-x-3 gap-y-1.5">
+                  {WEEKDAY_LABELS.map((label, i) => (
+                    <label key={i} className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={repeatDays.has(i)}
+                        onChange={() =>
+                          setRepeatDays((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          })
+                        }
+                        className="h-4 w-4 accent-[#2563eb]"
+                      />
+                      <span className="text-[12.5px] font-bold text-slate-600">{label}</span>
+                    </label>
                   ))}
                 </div>
-
-                <div className="mb-3 grid grid-cols-3 gap-2">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Month</span>
-                    <div className="relative">
-                      <select
-                        value={month}
-                        onChange={(e) => setMonth(Number(e.target.value))}
-                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
-                      >
-                        {MONTH_SHORT.map((m, i) => (
-                          <option key={m} value={i}>{m}</option>
-                        ))}
-                      </select>
-                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">
-                      {period === 'weekly' ? 'Day in week' : 'Date'}
-                    </span>
-                    <div className="relative">
-                      <select
-                        value={Math.min(day, daysInMonth(year, month))}
-                        onChange={(e) => setDay(Number(e.target.value))}
-                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
-                      >
-                        {dayOptions.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Year</span>
-                    <div className="relative">
-                      <select
-                        value={year}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
-                      >
-                        {years.map((y) => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
-                    </div>
-                  </label>
-                </div>
-
-                {period === 'weekly' && week.label && (
-                  <div className="mb-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-[12.5px] font-bold text-[#1e40af]">
-                    Week shown: {week.label}
-                    <span className="mt-0.5 block text-[11px] font-semibold text-[#3b82f6]">
-                      Sun–Sat week that includes {formatDayLabel(dueDate, false)}
-                    </span>
-                  </div>
-                )}
-                {period === 'monthly' && (
-                  <div className="mb-3 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-[12.5px] font-bold text-[#1e40af]">
-                    Month shown: {MONTHS[month]} {year}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">Time start</span>
-                    <div className="relative">
-                      <select
-                        value={hour12}
-                        onChange={(e) => setHour12(Number(e.target.value))}
-                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
-                      >
-                        {hourOptions.map((h) => (
-                          <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                        ))}
-                      </select>
-                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-slate-400">AM / PM</span>
-                    <div className="relative">
-                      <select
-                        value={ampm}
-                        onChange={(e) => setAmpm(e.target.value)}
-                        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/80 px-3 pr-7 text-[13px] font-bold text-slate-700 outline-none transition hover:border-[#2563eb]/40 focus:border-[#2563eb] focus:bg-white focus:ring-2 focus:ring-[#2563eb]/15"
-                      >
-                        <option value="AM">AM</option>
-                        <option value="PM">PM</option>
-                      </select>
-                      <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[9px] text-slate-400" />
-                    </div>
-                  </label>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {[
-                    { key: 'once', label: 'One-time' },
-                    { key: 'recurring', label: 'Recurring plan' },
-                  ].map((m) => (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => setScheduleMode(m.key)}
-                      className={`rounded-lg border px-3 py-1 text-[11.5px] font-bold transition ${
-                        scheduleMode === m.key
-                          ? 'border-[#2563eb] bg-[#eff6ff] text-[#2563eb]'
-                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+                <p className="mb-1 text-[11px] text-slate-400">
+                  {recurring
+                    ? `Repeats ${repeatDays.size ? 'on the checked days' : 'every workday'} from ${rangeFrom}${rangeTo ? ` to ${rangeTo}` : ' to year end'}.`
+                    : 'One-time on the start date. Add an end date or check days to make it repeat.'}
+                </p>
 
                 {/* Permission Date — employee excused for a date range */}
                 <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
