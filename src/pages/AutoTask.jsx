@@ -199,6 +199,12 @@ export default function AutoTask() {
   const [scheduleMode, setScheduleMode] = useState('once');
   const [followList, setFollowList] = useState(true);
 
+  // Permission window (dates the employee is excused — no tasks are
+  // generated and nothing counts as pending/overdue on those days).
+  const [permFrom, setPermFrom] = useState('');
+  const [permTo, setPermTo] = useState('');
+  const [permSaving, setPermSaving] = useState(false);
+
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-11
@@ -982,6 +988,70 @@ export default function AutoTask() {
                       {m.label}
                     </button>
                   ))}
+                </div>
+
+                {/* Permission Date — employee excused for a date range */}
+                <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+                  <p className="mb-1 text-[12.5px] font-extrabold text-slate-700">Permission Date</p>
+                  <p className="mb-2.5 text-[11px] text-slate-400">
+                    Employee unavailable; no tasks will be given, and nothing counts as pending or overdue on these days.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="block flex-1 min-w-[130px]">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-400">Start</span>
+                      <input
+                        type="date"
+                        value={permFrom}
+                        onChange={(e) => setPermFrom(e.target.value)}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-700 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15"
+                      />
+                    </label>
+                    <label className="block flex-1 min-w-[130px]">
+                      <span className="mb-1 block text-[11px] font-semibold text-slate-400">End</span>
+                      <input
+                        type="date"
+                        value={permTo}
+                        min={permFrom || undefined}
+                        onChange={(e) => setPermTo(e.target.value)}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-700 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={
+                        permSaving || !employeeId || !permFrom ||
+                        (!!permTo && permTo < permFrom)
+                      }
+                      onClick={async () => {
+                        setPermSaving(true);
+                        try {
+                          await api.post('/api/leave/permission', {
+                            user_id: employeeId,
+                            start_date: permFrom,
+                            end_date: permTo || permFrom,
+                            note: 'Permission',
+                          });
+                          toast.success(
+                            `Permission saved for ${selectedEmployee?.name || 'employee'} — ${permFrom}${permTo && permTo !== permFrom ? ` → ${permTo}` : ''}`
+                          );
+                          setPermFrom('');
+                          setPermTo('');
+                        } catch (e2) {
+                          toast.error(e2.message || 'Could not save permission');
+                        } finally {
+                          setPermSaving(false);
+                        }
+                      }}
+                      className="h-10 rounded-xl bg-[#1e3a5f] px-4 text-[12.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+                    >
+                      {permSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  {!employeeId && (
+                    <p className="mt-2 text-[11px] font-semibold text-amber-600">
+                      Select an employee first to set a permission date.
+                    </p>
+                  )}
                 </div>
 
                 {period !== 'daily' && (
