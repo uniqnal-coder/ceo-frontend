@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, toArray } from '../api/client'
 import Skeleton from '../components/ui/Skeleton'
+import { PlannerView, PlanEditDialog } from './AutoTask'
+import { toast } from '../utils/toast'
 
 const ROLE_BADGE = {
   teacher: 'bg-violet-50 text-violet-600',
   staff: 'bg-sky-50 text-sky-600',
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const todayISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function fmtWhen(iso) {
@@ -23,6 +33,13 @@ function fmtWhen(iso) {
     timeZone: 'Asia/Baghdad',
   })
   return `${day} · ${time}`
+}
+
+const fmtTime = (iso) => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Baghdad' })
 }
 
 function StatTile({ label, value, tone, soft }) {
@@ -68,13 +85,132 @@ function TaskList({ rows, empty, tone }) {
   )
 }
 
+/* Per-user detail for one calendar day — progress, buckets, attendance. */
+function DayDetailDialog({ person, dayISO, checkin, onClose }) {
+  const items = person.itemsByDay.get(dayISO) || []
+  const done = items.filter((t) => t.status === 'completed')
+  const open = items.filter((t) => t.status !== 'completed')
+  const overdue = open.filter((t) => t.overdue)
+  const pending = open.filter((t) => !t.overdue)
+  const pct = items.length ? Math.round((done.length / items.length) * 100) : 0
+  const dayLabel = new Date(`${dayISO}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <p className="text-[20px] font-extrabold text-slate-800">{person.name}</p>
+            <p className="text-[12.5px] font-semibold capitalize text-slate-400">
+              {person.role} · {dayLabel}
+            </p>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+            <i className="fas fa-xmark" />
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-2xl bg-brand p-4 text-white shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[14px] font-extrabold">Overall Progress</p>
+            <p className="text-[20px] font-extrabold">{pct}%</p>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-white/25">
+            <div className="h-full rounded-full bg-white transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-white/85">
+            <span>{done.length} of {items.length} completed</span>
+            <span>{open.length} remaining</span>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2.5">
+          <div className="rounded-2xl bg-emerald-50/70 p-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-500"><i className="fas fa-circle-check" /></span>
+            <p className="mt-2 text-[24px] font-extrabold leading-6 text-emerald-600">{done.length}</p>
+            <p className="text-[12px] font-semibold text-slate-500">Completed</p>
+          </div>
+          <div className="rounded-2xl bg-amber-50/70 p-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-amber-500"><i className="fas fa-ellipsis" /></span>
+            <p className="mt-2 text-[24px] font-extrabold leading-6 text-amber-600">{pending.length}</p>
+            <p className="text-[12px] font-semibold text-slate-500">Pending</p>
+          </div>
+          <div className="rounded-2xl bg-red-50/70 p-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-red-500"><i className="fas fa-clock" /></span>
+            <p className="mt-2 text-[24px] font-extrabold leading-6 text-red-500">{overdue.length}</p>
+            <p className="text-[12px] font-semibold text-slate-500">Overdue</p>
+          </div>
+          <div className="rounded-2xl bg-sky-50/70 p-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sky-500"><i className="fas fa-list-check" /></span>
+            <p className="mt-2 text-[24px] font-extrabold leading-6 text-sky-600">{items.length}</p>
+            <p className="text-[12px] font-semibold text-slate-500">Total Tasks</p>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-slate-100 p-4">
+          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Attendance</p>
+          {checkin === undefined ? (
+            <p className="text-[12.5px] text-slate-400">Loading…</p>
+          ) : checkin && checkin.check_in_time ? (
+            <p className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-slate-600">
+              <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-[11.5px] font-extrabold text-brand">Present</span>
+              In {fmtTime(checkin.check_in_time)} · Out {checkin.check_out_time ? fmtTime(checkin.check_out_time) : '—'}
+            </p>
+          ) : (
+            <p className="flex items-center gap-2 text-[13px] font-semibold text-slate-600">
+              <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-[11.5px] font-extrabold text-red-500">Absent</span>
+              In — · Out —
+            </p>
+          )}
+        </div>
+
+        {items.length > 0 && (
+          <div className="space-y-3">
+            {overdue.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Overdue</p>
+                <TaskList rows={overdue} empty="" tone="pending" />
+              </div>
+            )}
+            {pending.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
+                <TaskList rows={pending} empty="" tone="pending" />
+              </div>
+            )}
+            {done.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Completed</p>
+                <TaskList rows={done} empty="" tone="done" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function TasksTracking() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all') // all | pending | overdue | done
-  const [expanded, setExpanded] = useState(() => new Set())
+  const [view, setView] = useState('tracking') // tracking | planner
+  const [selectedDate, setSelectedDate] = useState(todayISO())
+  const now = new Date()
+  const [calYear, setCalYear] = useState(now.getFullYear())
+  const [calMonth, setCalMonth] = useState(now.getMonth())
+  const [detail, setDetail] = useState(null) // person for day dialog
+  const [checkinsByDay, setCheckinsByDay] = useState(new Map()) // dayISO -> Map(user_id -> checkin)
+
+  // Year Planner (moved here from Assign Task)
+  const [plans, setPlans] = useState(null)
+  const [editPlan, setEditPlan] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -92,32 +228,120 @@ export default function TasksTracking() {
       })
   }
 
+  const loadPlans = async () => {
+    try {
+      setPlans(toArray(await api.get('/api/task-schedules')))
+    } catch {
+      setPlans([])
+    }
+  }
+
   useEffect(() => {
     load()
+    loadPlans()
   }, [])
 
-  const people = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return (data?.people || []).filter((p) => {
-      if (filter === 'pending' && !p.totals.pending) return false
-      if (filter === 'overdue' && !p.totals.overdue) return false
-      if (filter === 'done' && !(p.totals.assigned && !(p.totals.unfinished ?? (p.totals.pending + p.totals.overdue)))) return false
-      if (!q) return true
-      if (p.name.toLowerCase().includes(q)) return true
-      return p.assigned_tasks.some((t) => t.title.toLowerCase().includes(q))
-    })
-  }, [data, search, filter])
+  // Attendance for the selected day (for the person dialog).
+  useEffect(() => {
+    if (checkinsByDay.has(selectedDate)) return
+    let live = true
+    api
+      .get(`/api/checkins/overview?date=${selectedDate}`)
+      .then((d) => {
+        if (!live) return
+        const m = new Map()
+        for (const c of d?.checkins || []) m.set(c.user_id, c)
+        setCheckinsByDay((prev) => new Map(prev).set(selectedDate, m))
+      })
+      .catch(() => {
+        if (live) setCheckinsByDay((prev) => new Map(prev).set(selectedDate, new Map()))
+      })
+    return () => { live = false }
+  }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggle = (id) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  // People enriched with a day-indexed view of their tasks.
+  const enriched = useMemo(() => {
+    return (data?.people || []).map((p) => {
+      const itemsByDay = new Map()
+      for (const t of p.assigned_tasks || []) {
+        const day = String(t.due_at || '').slice(0, 10)
+        if (!day) continue
+        if (!itemsByDay.has(day)) itemsByDay.set(day, [])
+        itemsByDay.get(day).push(t)
+      }
+      return { ...p, itemsByDay }
     })
+  }, [data])
+
+  // Calendar cells: per-day totals across everyone.
+  const dayTotals = useMemo(() => {
+    const m = new Map()
+    for (const p of enriched) {
+      for (const [day, items] of p.itemsByDay) {
+        const cur = m.get(day) || { total: 0, done: 0, overdue: 0 }
+        for (const t of items) {
+          cur.total += 1
+          if (t.status === 'completed') cur.done += 1
+          else if (t.overdue) cur.overdue += 1
+        }
+        m.set(day, cur)
+      }
+    }
+    return m
+  }, [enriched])
+
+  const calCells = useMemo(() => {
+    const first = new Date(calYear, calMonth, 1)
+    const cells = Array.from({ length: first.getDay() }, () => null)
+    const count = new Date(calYear, calMonth + 1, 0).getDate()
+    for (let d = 1; d <= count; d += 1) {
+      cells.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    }
+    return cells
+  }, [calYear, calMonth])
+
+  // People list for the selected date: only those with work that day, with
+  // that day's counts. Search + status filters apply to the day view.
+  const dayPeople = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return enriched
+      .map((p) => {
+        const items = p.itemsByDay.get(selectedDate) || []
+        const done = items.filter((t) => t.status === 'completed')
+        const open = items.filter((t) => t.status !== 'completed')
+        const overdue = open.filter((t) => t.overdue)
+        const pending = open.filter((t) => !t.overdue)
+        return { ...p, day: { items, done, pending, overdue } }
+      })
+      .filter((p) => {
+        if (!p.day.items.length) return false
+        if (filter === 'pending' && !p.day.pending.length) return false
+        if (filter === 'overdue' && !p.day.overdue.length) return false
+        if (filter === 'done' && !(p.day.items.length && !p.day.pending.length && !p.day.overdue.length)) return false
+        if (!q) return true
+        if (p.name.toLowerCase().includes(q)) return true
+        return p.day.items.some((t) => t.title.toLowerCase().includes(q))
+      })
+      .sort((a, b) => {
+        if (b.day.overdue.length !== a.day.overdue.length) return b.day.overdue.length - a.day.overdue.length
+        return String(a.name).localeCompare(String(b.name))
+      })
+  }, [enriched, selectedDate, search, filter])
+
+  const togglePlan = async (plan) => {
+    try {
+      await api.patch(`/api/task-schedules/${plan.id}`, { active: !plan.active })
+      loadPlans()
+    } catch (e) {
+      toast.error(e.message || 'Update failed')
+    }
   }
 
   const s = data?.summary
+  const today = todayISO()
+  const selLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
 
   return (
     <div className="mx-auto max-w-6xl p-5">
@@ -132,6 +356,20 @@ export default function TasksTracking() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-slate-200 bg-white p-1">
+            {[['tracking', 'fa-list-check', 'Tracking'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12.5px] font-extrabold transition ${
+                  view === key ? 'bg-[#1e3a5f] text-white' : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <i className={`fas ${icon} text-[11px]`} /> {label}
+              </button>
+            ))}
+          </div>
           <Link
             to="/auto-task"
             className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50"
@@ -140,7 +378,7 @@ export default function TasksTracking() {
           </Link>
           <button
             type="button"
-            onClick={load}
+            onClick={() => { load(); loadPlans() }}
             className="rounded-xl bg-brand px-3.5 py-2 text-[12.5px] font-extrabold text-white shadow-sm hover:opacity-90"
           >
             Refresh
@@ -148,20 +386,32 @@ export default function TasksTracking() {
         </div>
       </div>
 
-      {loading && (
+      {view === 'planner' && (
+        <PlannerView
+          plans={plans || []}
+          people={(data?.people || []).map((p) => ({ id: p.user_id, name: p.name, role: p.role }))}
+          onEditPlan={setEditPlan}
+          onTogglePlan={togglePlan}
+        />
+      )}
+
+      {view === 'tracking' && loading && (
         <div className="space-y-3">
           <Skeleton className="h-20 w-full rounded-2xl" />
           <Skeleton className="h-40 w-full rounded-2xl" />
         </div>
       )}
 
-      {!loading && error && (
-        <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600">
-          {error}
+      {view === 'tracking' && !loading && error && (
+        <div className="flex items-center justify-between rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          <span>{error}</span>
+          <button type="button" onClick={load} className="rounded-lg bg-red-500 px-3 py-1.5 text-[12px] font-extrabold text-white hover:opacity-90">
+            Retry
+          </button>
         </div>
       )}
 
-      {!loading && !error && data && (
+      {view === 'tracking' && !loading && !error && data && (
         <>
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <StatTile label="Staff" value={s.staff} tone="text-slate-700" soft="bg-slate-50" />
@@ -171,8 +421,76 @@ export default function TasksTracking() {
             <StatTile label="Overdue" value={s.overdue} tone="text-red-500" soft="bg-red-50" />
           </div>
 
+          {/* Month calendar — tap a date to see everyone's work that day */}
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => { const m = calMonth - 1; if (m < 0) { setCalMonth(11); setCalYear(calYear - 1) } else setCalMonth(m) }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50"
+              >
+                <i className="fas fa-chevron-left text-[12px]" />
+              </button>
+              <p className="text-[15px] font-extrabold text-slate-800">{MONTHS[calMonth]} {calYear}</p>
+              <button
+                type="button"
+                onClick={() => { const m = calMonth + 1; if (m > 11) { setCalMonth(0); setCalYear(calYear + 1) } else setCalMonth(m) }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50"
+              >
+                <i className="fas fa-chevron-right text-[12px]" />
+              </button>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {WEEKDAYS.map((w) => (
+                <p key={w} className={`pb-1 text-center text-[10.5px] font-bold uppercase ${w === 'Fri' || w === 'Sat' ? 'text-red-300' : 'text-slate-400'}`}>{w}</p>
+              ))}
+              {calCells.map((day, i) => {
+                if (!day) return <div key={`x${i}`} />
+                const t = dayTotals.get(day)
+                const isSel = day === selectedDate
+                const isToday = day === today
+                const allDone = t && t.done === t.total
+                const hasOverdue = t && t.overdue > 0
+                const openCount = t ? t.total - t.done : 0
+                let tone = 'hover:bg-slate-50 text-slate-600'
+                if (t) {
+                  if (allDone) tone = 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  else if (hasOverdue) tone = 'bg-red-50 text-red-600 hover:bg-red-100'
+                  else tone = 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                }
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setSelectedDate(day)}
+                    className={`flex h-14 flex-col items-center justify-center rounded-xl text-[13px] font-extrabold transition ${tone} ${
+                      isSel ? 'ring-2 ring-brand ring-offset-1' : ''
+                    } ${isToday && !isSel ? 'ring-1 ring-slate-300' : ''}`}
+                  >
+                    <span>{Number(day.slice(8, 10))}</span>
+                    {t ? (
+                      day > today && !hasOverdue ? (
+                        <span className="mt-0.5 flex gap-0.5">
+                          {Array.from({ length: Math.min(3, t.total) }).map((_, j) => (
+                            <span key={j} className="h-1 w-1 rounded-full bg-sky-400" />
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold opacity-70">{allDone ? '✓' : openCount}</span>
+                      )
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1">
+            <p className="mr-1 text-[13.5px] font-extrabold text-slate-700">
+              <i className="fas fa-calendar-day mr-1.5 text-brand" />
+              {selLabel}
+            </p>
+            <div className="relative min-w-[200px] flex-1">
               <i className="fas fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-300" />
               <input
                 value={search}
@@ -202,95 +520,75 @@ export default function TasksTracking() {
             ))}
           </div>
 
-          {people.length === 0 ? (
+          {dayPeople.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-[13px] text-slate-400">
-              No staff match this filter.
+              No tasks on this date{filter !== 'all' ? ' for this filter' : ''}. Tap another day on the calendar.
             </div>
           ) : (
             <div className="space-y-2.5">
-              {people.map((p) => {
-                const open = expanded.has(p.user_id)
+              {dayPeople.map((p) => {
+                const pct = p.day.items.length ? Math.round((p.day.done.length / p.day.items.length) * 100) : 0
                 return (
-                  <div
+                  <button
                     key={p.user_id}
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                    type="button"
+                    onClick={() => setDetail(p)}
+                    className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm transition hover:border-brand/40 hover:bg-slate-50/70"
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggle(p.user_id)}
-                      className="flex w-full flex-wrap items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50/70"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-[14.5px] font-extrabold text-slate-800">{p.name}</p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-500'}`}
-                          >
-                            {p.role}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[12px] text-slate-400">
-                          {p.totals.assigned
-                            ? `${p.totals.completed} done · ${p.totals.pending} pending · ${p.totals.overdue} overdue`
-                            : 'No tasks yet'}
-                        </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[14.5px] font-extrabold text-slate-800">{p.name}</p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-500'}`}
+                        >
+                          {p.role}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="rounded-lg bg-brand-soft px-2 py-1 text-[11px] font-extrabold text-brand" title="Completed">
-                          {p.totals.completed}
-                        </span>
-                        <span className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-extrabold text-amber-600" title="Pending (before deadline)">
-                          {p.totals.pending}
-                        </span>
-                        <span className="rounded-lg bg-red-50 px-2 py-1 text-[11px] font-extrabold text-red-500" title="Overdue (past deadline)">
-                          {p.totals.overdue}
-                        </span>
-                        <i
-                          className={`fas fa-chevron-${open ? 'up' : 'down'} ml-1 text-[11px] text-slate-300`}
+                      <p className="mt-0.5 text-[12px] text-slate-400">
+                        {p.day.done.length} done · {p.day.pending.length} pending · {p.day.overdue.length} overdue
+                      </p>
+                      <div className="mt-1.5 h-1.5 max-w-[260px] overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${pct === 100 ? 'bg-emerald-500' : p.day.overdue.length ? 'bg-red-400' : 'bg-amber-400'}`}
+                          style={{ width: `${Math.max(pct, 4)}%` }}
                         />
                       </div>
-                    </button>
-
-                    {open && (
-                      <div className="grid gap-4 border-t border-slate-100 px-4 py-4 md:grid-cols-3">
-                        <div>
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                            Pending (on time)
-                          </p>
-                          <TaskList
-                            rows={p.pending_tasks}
-                            empty="None on time"
-                            tone="pending"
-                          />
-                        </div>
-                        <div>
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                            Overdue
-                          </p>
-                          <TaskList
-                            rows={p.overdue_tasks || []}
-                            empty="No overdue tasks"
-                            tone="pending"
-                          />
-                        </div>
-                        <div>
-                          <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                            Completed
-                          </p>
-                          <TaskList
-                            rows={p.completed_tasks}
-                            empty="No completed tasks yet"
-                            tone="done"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-lg bg-brand-soft px-2 py-1 text-[11px] font-extrabold text-brand" title="Completed">
+                        {p.day.done.length}
+                      </span>
+                      <span className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-extrabold text-amber-600" title="Pending">
+                        {p.day.pending.length}
+                      </span>
+                      <span className="rounded-lg bg-red-50 px-2 py-1 text-[11px] font-extrabold text-red-500" title="Overdue">
+                        {p.day.overdue.length}
+                      </span>
+                      <i className="fas fa-chevron-right ml-1 text-[11px] text-slate-300" />
+                    </div>
+                  </button>
                 )
               })}
             </div>
           )}
         </>
+      )}
+
+      {detail && (
+        <DayDetailDialog
+          person={detail}
+          dayISO={selectedDate}
+          checkin={checkinsByDay.get(selectedDate)?.get(detail.user_id) ?? (checkinsByDay.has(selectedDate) ? null : undefined)}
+          onClose={() => setDetail(null)}
+        />
+      )}
+
+      {editPlan && (
+        <PlanEditDialog
+          plan={editPlan}
+          onClose={() => setEditPlan(null)}
+          onSaved={() => { setEditPlan(null); loadPlans() }}
+        />
       )}
     </div>
   )

@@ -217,6 +217,7 @@ export default function AutoTask() {
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState(null);
   const [editPlan, setEditPlan] = useState(null);
+  const [batchPerson, setBatchPerson] = useState(null);
   const [view, setView] = useState('assign');
   const [history, setHistory] = useState(null);
   const [historyDone, setHistoryDone] = useState(false);
@@ -262,15 +263,25 @@ export default function AutoTask() {
     setDayPlan({});
   }, [scheduleWindowKey]);
 
-  const loadHistory = async (reset = true) => {
+  // Assignment history: one row per person with anything assigned, so the
+  // admin edits a user's whole batch instead of scanning single tasks.
+  const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const offset = reset ? 0 : (history?.length || 0);
-      const page = toArray(await api.get(`/api/staff-tasks/recent?limit=${HISTORY_PAGE}&offset=${offset}`));
-      setHistory((prev) => (reset ? page : [...(prev || []), ...page]));
-      setHistoryDone(page.length < HISTORY_PAGE);
+      const d = await api.get('/api/staff-tasks/tracking');
+      const rows = (d?.people || [])
+        .filter((p) => p.totals?.assigned > 0)
+        .map((p) => {
+          const dates = (p.assigned_tasks || [])
+            .map((t) => String(t.due_at || '').slice(0, 10))
+            .filter(Boolean)
+            .sort();
+          return { ...p, latest: dates[dates.length - 1] || null };
+        });
+      setHistory(rows);
+      setHistoryDone(true);
     } catch {
-      if (reset) setHistory([]);
+      setHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -629,30 +640,7 @@ export default function AutoTask() {
           <p className="text-[12px] font-semibold text-slate-400">Tasks › Assign Task</p>
           <h1 className="text-[22px] font-extrabold text-slate-800">Assign Task</h1>
         </div>
-        <div className="flex rounded-xl border border-slate-200 bg-white p-1">
-          {[['assign', 'fa-paper-plane', 'Assign'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setView(key)}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12.5px] font-extrabold transition ${
-                view === key ? 'bg-[#1e3a5f] text-white' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <i className={`fas ${icon} text-[11px]`} /> {label}
-            </button>
-          ))}
-        </div>
       </div>
-
-      {view === 'planner' && (
-        <PlannerView
-          plans={plans || []}
-          people={people}
-          onEditPlan={setEditPlan}
-          onTogglePlan={togglePlan}
-        />
-      )}
 
       {view === 'assign' && (
         <>
@@ -1148,51 +1136,6 @@ export default function AutoTask() {
             </div>
           </div>
 
-          {/* Recurring plans */}
-          {plans && plans.length > 0 && (
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Recurring plans
-              </p>
-              <div className="space-y-2">
-                {plans.map((plan) => (
-                  <div key={plan.id} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 px-3.5 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-extrabold uppercase ${ROLE_BADGE[plan.role]}`}>
-                      {plan.role}
-                    </span>
-                    <span className="text-[12.5px] font-bold text-slate-700">
-                      {REPEATS.find((r) => r.key === plan.repeat)?.label || plan.repeat}
-                    </span>
-                    <span className="text-[11.5px] text-slate-500">
-                      {plan.user_ids?.length ? `${plan.user_ids.length} user${plan.user_ids.length === 1 ? '' : 's'}` : `All ${plan.role === 'staff' ? 'staff' : 'teachers'}`}
-                      {' · '}
-                      {plan.titles?.length ? `${plan.titles.length} task${plan.titles.length === 1 ? '' : 's'}` : 'role task list (auto)'}
-                      {' · '}
-                      {plan.start_date} → {plan.end_date}
-                    </span>
-                    <span className="ml-auto flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => togglePlan(plan)}
-                        className={`rounded-full px-3 py-1 text-[11px] font-extrabold transition ${
-                          plan.active ? 'bg-brand-soft text-brand' : 'bg-slate-200 text-slate-500'
-                        }`}
-                      >
-                        {plan.active ? '● Active' : '⏸ Paused'}
-                      </button>
-                      <button type="button" onClick={() => setEditPlan(plan)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:text-brand">
-                        <i className="fas fa-pen text-[11px]" />
-                      </button>
-                      <button type="button" onClick={() => deletePlan(plan)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:text-red-500">
-                        <i className="fas fa-trash text-[11px]" />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* History */}
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1203,52 +1146,47 @@ export default function AutoTask() {
             ) : history.length === 0 ? (
               <p className="py-4 text-center text-[12.5px] text-slate-400">No tasks assigned yet</p>
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[12.5px]">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-[10.5px] uppercase tracking-wide text-slate-400">
-                        <th className="px-2 py-2">User</th>
-                        <th className="px-2 py-2">Task</th>
-                        <th className="px-2 py-2">Due</th>
-                        <th className="px-2 py-2">Status</th>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[12.5px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10.5px] uppercase tracking-wide text-slate-400">
+                      <th className="px-2 py-2">User</th>
+                      <th className="px-2 py-2">Tasks</th>
+                      <th className="px-2 py-2">Date</th>
+                      <th className="px-2 py-2 text-right">Customize</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((p) => (
+                      <tr key={p.user_id} className="border-b border-slate-50">
+                        <td className="whitespace-nowrap px-2 py-2.5">
+                          <span className="font-extrabold text-slate-700">{p.name}</span>
+                          <span className={`ml-2 rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase ${ROLE_BADGE[p.role] || 'bg-slate-100 text-slate-500'}`}>
+                            {p.role}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">
+                          {p.totals.assigned} Task{p.totals.assigned === 1 ? '' : 's'} Assigned
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2.5 text-slate-500">
+                          {p.latest
+                            ? new Date(`${p.latest}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '—'}
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setBatchPerson(p)}
+                            className="rounded-lg bg-[#2563eb] px-4 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:opacity-90"
+                          >
+                            Edit
+                          </button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((t) => (
-                        <tr key={t.id} className="border-b border-slate-50">
-                          <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">
-                            {t.users?.name || '—'}
-                          </td>
-                          <td className="max-w-[260px] truncate px-2 py-2 text-slate-600">{t.title}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-slate-500">
-                            {t.due_at
-                              ? `${new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${formatTaskTime(t.due_at)}`
-                              : '—'}
-                          </td>
-                          <td className="px-2 py-2">
-                            <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
-                              t.status === 'completed' ? 'bg-brand-soft text-brand' : 'bg-amber-50 text-amber-600'
-                            }`}>
-                              {t.status === 'completed' ? 'Completed' : 'Pending'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {!historyDone && (
-                  <button
-                    type="button"
-                    onClick={() => loadHistory(false)}
-                    disabled={historyLoading}
-                    className="mt-3 w-full rounded-xl border border-slate-200 py-2 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    {historyLoading ? 'Loading…' : 'Load more'}
-                  </button>
-                )}
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>
@@ -1261,13 +1199,21 @@ export default function AutoTask() {
           onSaved={() => { setEditPlan(null); loadPlans(); }}
         />
       )}
+
+      {batchPerson && (
+        <BatchEditDialog
+          person={batchPerson}
+          onClose={() => setBatchPerson(null)}
+          onSaved={() => { setBatchPerson(null); loadPlans(); loadHistory(); }}
+        />
+      )}
     </div>
   );
 }
 
 /* ============ Year Planner: month calendar of plans + assignments ============ */
 
-function PlannerView({ plans, people, onEditPlan, onTogglePlan }) {
+export function PlannerView({ plans, people, onEditPlan, onTogglePlan }) {
   const now = new Date();
   const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [summary, setSummary] = useState({});
@@ -1423,7 +1369,7 @@ function PlannerView({ plans, people, onEditPlan, onTogglePlan }) {
 
 /* ============ Edit / reschedule a recurring plan ============ */
 
-function PlanEditDialog({ plan, onClose, onSaved }) {
+export function PlanEditDialog({ plan, onClose, onSaved }) {
   const [repeat, setRepeat] = useState(plan.repeat);
   const [weekdays, setWeekdays] = useState(new Set((plan.weekdays || []).map(Number)));
   const [startDate, setStartDate] = useState(plan.start_date);
@@ -1565,19 +1511,304 @@ function PlanEditDialog({ plan, onClose, onSaved }) {
   );
 }
 
+/* ============ Batch editor: one user's plan + permissions ============ */
+
+export function BatchEditDialog({ person, onClose, onSaved }) {
+  const [roleTasks, setRoleTasks] = useState(null);
+  const [plan, setPlan] = useState(undefined); // undefined = loading
+  const [selected, setSelected] = useState(new Set());
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [startTime, setStartTime] = useState('09:00');
+  const [dueTime, setDueTime] = useState('17:00');
+  const [weekdays, setWeekdays] = useState(new Set([0, 1, 2, 3, 4]));
+  const [permFrom, setPermFrom] = useState('');
+  const [permTo, setPermTo] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const [tasksRes, plansRes] = await Promise.all([
+          api.get(`/api/role-tasks?role=${person.role}`),
+          api.get('/api/task-schedules'),
+        ]);
+        if (!live) return;
+        const pool = toArray(tasksRes);
+        setRoleTasks(pool);
+        // The user's newest plan seeds the form; the rest start from defaults.
+        const mine = toArray(plansRes)
+          .filter((pl) => pl.role === person.role && (pl.user_ids || []).includes(person.user_id))
+          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+        const pl = mine[0] || null;
+        setPlan(pl);
+        if (pl) {
+          setFromDate(pl.start_date || '');
+          setToDate(pl.end_date || '');
+          setStartTime(pl.start_time || '09:00');
+          setDueTime(pl.due_time || '17:00');
+          if (Array.isArray(pl.weekdays) && pl.weekdays.length) {
+            setWeekdays(new Set(pl.weekdays.map(Number)));
+          }
+          setSelected(new Set(pl.titles?.length ? pl.titles : pool.map((t) => t.title)));
+        } else {
+          setSelected(new Set(pool.map((t) => t.title)));
+        }
+      } catch (e) {
+        if (live) {
+          setRoleTasks([]);
+          setPlan(null);
+          toast.error(e.message || 'Could not load this user');
+        }
+      }
+    })();
+    return () => { live = false; };
+  }, [person]);
+
+  const pool = roleTasks || [];
+  const allOn = pool.length > 0 && pool.every((t) => selected.has(t.title));
+  const start12 = from24h(startTime);
+  const due12 = from24h(dueTime);
+
+  const toggleTitle = (title) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+
+  const save = async () => {
+    const titles = pool.filter((t) => selected.has(t.title)).map((t) => t.title);
+    if (!titles.length) return toast.error('Select at least one task');
+    if (!fromDate || !toDate || toDate < fromDate) return toast.error('Pick a valid date range');
+    if (startTime >= dueTime) return toast.error('Deadline must be after start time');
+    const days = [...weekdays].sort();
+    const settings = {
+      titles,
+      repeat: days.length ? 'custom' : 'daily',
+      weekdays: days,
+      start_date: fromDate,
+      end_date: toDate,
+      start_time: startTime,
+      due_time: dueTime,
+    };
+    setSaving(true);
+    try {
+      if (plan && (plan.user_ids || []).length > 1) {
+        // Shared plan: split this user out so only they change.
+        await api.patch(`/api/task-schedules/${plan.id}`, {
+          user_ids: plan.user_ids.filter((u) => u !== person.user_id),
+        });
+        await api.post('/api/task-schedules', { role: person.role, user_ids: [person.user_id], ...settings });
+      } else if (plan) {
+        await api.patch(`/api/task-schedules/${plan.id}`, settings);
+      } else {
+        await api.post('/api/task-schedules', { role: person.role, user_ids: [person.user_id], ...settings });
+      }
+      if (permFrom) {
+        await api.post('/api/leave/permission', {
+          user_id: person.user_id,
+          start_date: permFrom,
+          end_date: permTo || permFrom,
+          note: 'Permission',
+        });
+      }
+      toast.success(`Saved changes for ${person.name}`);
+      onSaved();
+    } catch (e) {
+      toast.error(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const timeSelect = (value12, onHHMM) => (
+    <span className="inline-flex overflow-hidden rounded-xl border border-slate-200">
+      <select
+        value={value12.hour}
+        onChange={(e) => onHHMM(to24h(e.target.value, 0, value12.ampm))}
+        className="h-9 bg-white px-2 text-[12.5px] font-bold text-slate-700 outline-none"
+      >
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
+          <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+        ))}
+      </select>
+      <select
+        value={value12.ampm}
+        onChange={(e) => onHHMM(to24h(value12.hour, 0, e.target.value))}
+        className="h-9 border-l border-slate-200 bg-slate-50 px-2 text-[12.5px] font-bold text-slate-700 outline-none"
+      >
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </span>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-[16px] font-extrabold text-slate-800">
+            Edit Assigned Task Batch — {person.name}
+          </p>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50">
+            <i className="fas fa-xmark" />
+          </button>
+        </div>
+
+        {roleTasks === null || plan === undefined ? (
+          <p className="py-10 text-center text-[13px] text-slate-400">Loading…</p>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {/* Tasks */}
+            <div>
+              <p className="mb-2 text-[13px] font-extrabold text-slate-700">
+                <i className="fas fa-list-check mr-1.5 text-[#2563eb]" />
+                Tasks
+                <span className="ml-2 rounded-full bg-[#2563eb] px-2 py-0.5 text-[10px] font-extrabold text-white">{pool.length}</span>
+              </p>
+              {pool.length === 0 ? (
+                <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-[12px] text-amber-700">
+                  No tasks for this role yet — add them in Add Task.
+                </p>
+              ) : (
+                <div className="max-h-80 space-y-1 overflow-y-auto rounded-xl bg-[#eff6ff] p-2.5">
+                  <label className="mb-1 flex cursor-pointer items-center gap-2 rounded-lg border-b border-blue-100 px-1.5 pb-1.5 hover:bg-white/70">
+                    <input
+                      type="checkbox"
+                      checked={allOn}
+                      onChange={() => setSelected(allOn ? new Set() : new Set(pool.map((t) => t.title)))}
+                      className="h-4 w-4 accent-[#2563eb]"
+                    />
+                    <span className="text-[12px] font-extrabold text-slate-600">{allOn ? 'Deselect all' : 'Select all'}</span>
+                    <span className="ml-auto text-[10.5px] font-bold text-slate-400">
+                      {pool.filter((t) => selected.has(t.title)).length}/{pool.length}
+                    </span>
+                  </label>
+                  {pool.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/70">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(t.title)}
+                        onChange={() => toggleTitle(t.title)}
+                        className="h-4 w-4 accent-[#2563eb]"
+                      />
+                      <span className="text-[12.5px] font-semibold text-slate-600">{t.title}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Customize */}
+            <div>
+              <p className="mb-2 text-[13px] font-extrabold text-slate-700">
+                <i className="fas fa-calendar-days mr-1.5 text-[#2563eb]" />
+                Customize Selected Tasks
+              </p>
+
+              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Recurring date Range:</p>
+              <div className="mb-3 flex items-center gap-1.5">
+                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+                <span className="text-[11px] font-bold text-slate-400">to</span>
+                <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+              </div>
+
+              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Recurring Time:</p>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-[11.5px] font-bold text-slate-500">Start</span>
+                {timeSelect(start12, setStartTime)}
+                <span className="text-[11.5px] font-bold text-slate-500">Deadline</span>
+                {timeSelect(due12, setDueTime)}
+              </div>
+
+              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Repeats on:</p>
+              <div className="mb-3 flex flex-wrap gap-x-2.5 gap-y-1">
+                {WEEKDAY_LABELS.map((label, i) => (
+                  <label key={i} className="flex cursor-pointer items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={weekdays.has(i)}
+                      onChange={() =>
+                        setWeekdays((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        })
+                      }
+                      className="h-3.5 w-3.5 accent-[#2563eb]"
+                    />
+                    <span className="text-[11.5px] font-bold text-slate-600">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Permissions:</p>
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={permFrom} onChange={(e) => setPermFrom(e.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+                <span className="text-[11px] font-bold text-slate-400">to</span>
+                <input type="date" value={permTo} min={permFrom || undefined} onChange={(e) => setPermTo(e.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+              </div>
+              <p className="mt-1 text-[10.5px] text-slate-400">
+                Days off — no tasks are given and nothing counts as pending or overdue.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-center gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || roleTasks === null || plan === undefined}
+            className="rounded-xl bg-brand px-6 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-slate-100 px-5 py-2.5 text-[13px] font-bold text-slate-600 hover:bg-slate-200"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============ Per-user profile: stats + task calendar ============ */
 
 function UserDetailDialog({ person, onClose }) {
   const [tasks, setTasks] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const now = new Date();
   const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [dayISO, setDayISO] = useState(todayISO());
 
   useEffect(() => {
-    api.get(`/api/staff-tasks/user/${person.id}`)
-      .then((d) => setTasks(toArray(d)))
-      .catch(() => setTasks([]));
-  }, [person.id]);
+    // A failed or slow request must show as an error with Retry, never as
+    // an empty profile the admin mistakes for "no tasks".
+    let live = true;
+    setTasks(null);
+    setLoadError('');
+    withTimeout(api.get(`/api/staff-tasks/user/${person.id}`), 15000, 'Loading tasks')
+      .then((d) => { if (live) setTasks(toArray(d)); })
+      .catch((e) => { if (live) setLoadError(e.message || 'Could not load tasks'); });
+    return () => { live = false; };
+  }, [person.id, attempt]);
 
   const today = todayISO();
   const dayOf = (t) => String(t.due_at || t.created_at || '').slice(0, 10);
@@ -1646,7 +1877,18 @@ function UserDetailDialog({ person, onClose }) {
           </button>
         </div>
 
-        {!tasks ? (
+        {loadError ? (
+          <div className="py-10 text-center">
+            <p className="mb-3 text-[13px] text-red-500">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => setAttempt((a) => a + 1)}
+              className="rounded-xl bg-brand px-5 py-2 text-[12.5px] font-extrabold text-white hover:opacity-90"
+            >
+              <i className="fas fa-rotate-right mr-1.5" /> Retry
+            </button>
+          </div>
+        ) : !tasks ? (
           <p className="py-10 text-center text-[13px] text-slate-400">Loading…</p>
         ) : (
           <>
