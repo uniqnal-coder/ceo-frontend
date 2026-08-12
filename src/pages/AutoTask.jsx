@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../utils/toast';
 import { api, toArray } from '../api/client';
 
@@ -670,10 +670,22 @@ export default function AutoTask() {
     return history.filter((p) => !inPlan.has(p.user_id));
   }, [history, plans]);
 
+  // Delete uses an in-app two-tap confirm: native confirm() dialogs are
+  // blocked inside some webviews, which made the button look dead.
+  const [confirmKey, setConfirmKey] = useState(null);
+  const confirmTimer = useRef(null);
+  const armConfirm = (key) => {
+    setConfirmKey(key);
+    clearTimeout(confirmTimer.current);
+    confirmTimer.current = setTimeout(() => setConfirmKey(null), 4000);
+  };
+
   // No-plan rows: deleting clears the person's not-yet-completed one-time
   // tasks (completed work stays for reports).
   const clearOneTime = async (p) => {
-    if (!confirm(`Delete ${p.name}'s assigned tasks that are not completed yet? Completed work stays.`)) return;
+    const key = `ot:${p.user_id}`;
+    if (confirmKey !== key) return armConfirm(key);
+    setConfirmKey(null);
     try {
       const r = await api.del(`/api/staff-tasks/user/${p.user_id}/open`);
       toast.success(`Removed ${r.deleted ?? ''} open task${r.deleted === 1 ? '' : 's'} for ${p.name}`);
@@ -686,10 +698,8 @@ export default function AutoTask() {
 
   const deletePlanRow = async (row) => {
     const shared = row.uid && (row.plan.user_ids || []).length > 1;
-    const msg = shared
-      ? `Remove ${row.name} from this plan? The other people keep it.`
-      : 'Delete this plan? Already-created tasks stay.';
-    if (!confirm(msg)) return;
+    if (confirmKey !== row.key) return armConfirm(row.key);
+    setConfirmKey(null);
     try {
       if (shared) {
         await api.patch(`/api/task-schedules/${row.plan.id}`, {
@@ -1217,7 +1227,12 @@ export default function AutoTask() {
                             onClick={() =>
                               row.uid
                                 ? setBatchPerson({
-                                    person: { user_id: row.uid, name: row.name, role: row.role },
+                                    person: {
+                                      user_id: row.uid,
+                                      name: row.name,
+                                      role: row.role,
+                                      category_id: people.find((x) => x.id === row.uid)?.category_id || null,
+                                    },
                                     plan: row.plan,
                                   })
                                 : setEditPlan(row.plan)
@@ -1230,9 +1245,13 @@ export default function AutoTask() {
                             type="button"
                             onClick={() => deletePlanRow(row)}
                             title={row.uid && (row.plan.user_ids || []).length > 1 ? 'Remove this person from the plan' : 'Delete plan'}
-                            className="ml-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11.5px] font-extrabold text-rose-500 transition hover:bg-rose-50"
+                            className={`ml-2 rounded-lg px-3 py-1.5 text-[11.5px] font-extrabold transition ${
+                              confirmKey === row.key
+                                ? 'bg-rose-600 text-white shadow-sm hover:bg-rose-700'
+                                : 'border border-rose-200 bg-white text-rose-500 hover:bg-rose-50'
+                            }`}
                           >
-                            <i className="fas fa-trash-can" />
+                            {confirmKey === row.key ? 'Confirm?' : <i className="fas fa-trash-can" />}
                           </button>
                         </td>
                       </tr>
@@ -1256,7 +1275,12 @@ export default function AutoTask() {
                         <td className="whitespace-nowrap px-2 py-2.5 text-right">
                           <button
                             type="button"
-                            onClick={() => setBatchPerson({ person: p, plan: null })}
+                            onClick={() =>
+                              setBatchPerson({
+                                person: { ...p, category_id: people.find((x) => x.id === p.user_id)?.category_id || null },
+                                plan: null,
+                              })
+                            }
                             className="rounded-lg bg-[#2563eb] px-4 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:opacity-90"
                           >
                             Edit
@@ -1265,9 +1289,13 @@ export default function AutoTask() {
                             type="button"
                             onClick={() => clearOneTime(p)}
                             title="Delete this person's open one-time tasks"
-                            className="ml-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11.5px] font-extrabold text-rose-500 transition hover:bg-rose-50"
+                            className={`ml-2 rounded-lg px-3 py-1.5 text-[11.5px] font-extrabold transition ${
+                              confirmKey === `ot:${p.user_id}`
+                                ? 'bg-rose-600 text-white shadow-sm hover:bg-rose-700'
+                                : 'border border-rose-200 bg-white text-rose-500 hover:bg-rose-50'
+                            }`}
                           >
-                            <i className="fas fa-trash-can" />
+                            {confirmKey === `ot:${p.user_id}` ? 'Confirm?' : <i className="fas fa-trash-can" />}
                           </button>
                         </td>
                       </tr>
@@ -1619,8 +1647,11 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
     let live = true;
     (async () => {
       try {
+        // Only this person's staff-role (category) tasks — never the
+        // whole role catalog.
+        const catId = (planProp && planProp.category_id) || person.category_id || null;
         const [tasksRes, plansRes] = await Promise.all([
-          api.get(`/api/role-tasks?role=${person.role}`),
+          api.get(`/api/role-tasks?role=${person.role}${catId ? `&category_id=${catId}` : ''}`),
           planProp === undefined ? api.get('/api/task-schedules') : Promise.resolve(null),
         ]);
         if (!live) return;
