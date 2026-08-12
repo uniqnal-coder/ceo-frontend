@@ -1821,11 +1821,11 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
   };
 
   const timeSelect = (value12, onHHMM) => (
-    <span className="inline-flex overflow-hidden rounded-xl border border-slate-200">
+    <span className="flex w-full overflow-hidden rounded-lg border border-slate-200">
       <select
         value={value12.hour}
         onChange={(e) => onHHMM(to24h(e.target.value, 0, value12.ampm))}
-        className="h-9 bg-white px-2 text-[12.5px] font-bold text-slate-700 outline-none"
+        className="h-9 min-w-0 flex-1 bg-white px-2 text-[12.5px] font-bold text-slate-700 outline-none"
       >
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
           <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
@@ -1922,56 +1922,80 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
                 Customize Selected Tasks
               </p>
 
-              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Recurring date Range:</p>
-              <div className="mb-3 flex items-center gap-1.5">
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
-                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
-                <span className="text-[11px] font-bold text-slate-400">to</span>
-                <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)}
-                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+              <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                  Recurring date range
+                </p>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                  <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+                    className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+                  <span className="text-[11px] font-bold text-slate-400">to</span>
+                  <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)}
+                    className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+                </div>
               </div>
 
-              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Recurring Time:</p>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-[11.5px] font-bold text-slate-500">Start</span>
-                {timeSelect(start12, setStartTime)}
-                <span className="text-[11.5px] font-bold text-slate-500">Deadline</span>
-                {timeSelect(due12, setDueTime)}
+              <div className="mt-2.5 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                  Recurring time
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-bold text-slate-400">Start</p>
+                    {timeSelect(start12, setStartTime)}
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-bold text-slate-400">Deadline</p>
+                    {timeSelect(due12, setDueTime)}
+                  </div>
+                </div>
               </div>
 
-              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Repeats on:</p>
-              <div className="mb-3 flex flex-wrap gap-x-2.5 gap-y-1">
-                {WEEKDAY_LABELS.map((label, i) => (
-                  <label key={i} className="flex cursor-pointer items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={weekdays.has(i)}
-                      onChange={() =>
-                        setWeekdays((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(i)) next.delete(i);
-                          else next.add(i);
-                          return next;
-                        })
-                      }
-                      className="h-3.5 w-3.5 accent-[#2563eb]"
-                    />
-                    <span className="text-[11.5px] font-bold text-slate-600">{label}</span>
-                  </label>
-                ))}
+              <div className="mt-2.5 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                  Repeats on
+                </p>
+                <div className="flex gap-1">
+                  {WEEKDAY_LABELS.map((label, i) => {
+                    const on = weekdays.has(i);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() =>
+                          setWeekdays((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(i)) next.delete(i);
+                            else next.add(i);
+                            return next;
+                          })
+                        }
+                        className={`h-8 flex-1 rounded-lg text-[10.5px] font-extrabold transition ${
+                          on ? 'bg-[#2563eb] text-white shadow-sm' : 'bg-white text-slate-400 ring-1 ring-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <p className="mb-1 text-[11.5px] font-bold text-slate-600">Permissions:</p>
-              <div className="flex items-center gap-1.5">
-                <input type="date" value={permFrom} onChange={(e) => setPermFrom(e.target.value)}
-                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
-                <span className="text-[11px] font-bold text-slate-400">to</span>
-                <input type="date" value={permTo} min={permFrom || undefined} onChange={(e) => setPermTo(e.target.value)}
-                  className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-[#2563eb]" />
+              <div className="mt-2.5 rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+                <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-amber-600">
+                  Permission days
+                </p>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+                  <input type="date" value={permFrom} onChange={(e) => setPermFrom(e.target.value)}
+                    className="h-9 min-w-0 rounded-lg border border-amber-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-amber-400" />
+                  <span className="text-[11px] font-bold text-amber-400">to</span>
+                  <input type="date" value={permTo} min={permFrom || undefined} onChange={(e) => setPermTo(e.target.value)}
+                    className="h-9 min-w-0 rounded-lg border border-amber-200 bg-white px-2 text-[12px] font-semibold text-slate-700 outline-none focus:border-amber-400" />
+                </div>
+                <p className="mt-1.5 text-[10.5px] text-amber-600/80">
+                  Days off — no tasks are given and nothing counts as pending or overdue.
+                </p>
               </div>
-              <p className="mt-1 text-[10.5px] text-slate-400">
-                Days off — no tasks are given and nothing counts as pending or overdue.
-              </p>
             </div>
           </div>
         )}
