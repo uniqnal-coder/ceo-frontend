@@ -57,7 +57,10 @@ export const navGroups = [
   },
   {
     title: 'System',
-    items: [{ to: '/settings', label: 'Settings', short: 'Settings', icon: 'fa-gear' }],
+    items: [
+      { to: '/users', label: 'User Accounts', short: 'Users', icon: 'fa-user-shield' },
+      { to: '/settings', label: 'Settings', short: 'Settings', icon: 'fa-gear' },
+    ],
   },
 ]
 

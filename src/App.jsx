@@ -17,6 +17,7 @@ import Attendance from './pages/Attendance';
 import PeriodReports from './pages/PeriodReports';
 import TasksTracking from './pages/TasksTracking';
 import Settings from './pages/Settings';
+import UserAccounts from './pages/UserAccounts';
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/reports" element={<PeriodReports />} />
           <Route path="/reports/:period" element={<Navigate to="/reports" replace />} />
           <Route path="/tasks-tracking" element={<TasksTracking />} />
+          <Route path="/users" element={<UserAccounts />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
