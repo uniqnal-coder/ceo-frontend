@@ -1722,12 +1722,13 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
       return next;
     });
 
-  const save = async () => {
+  const save = async (asNew = false) => {
     const titles = pool.filter((t) => selected.has(t.title)).map((t) => t.title);
     if (!titles.length) return toast.error('Select at least one task');
     if (!fromDate || !toDate || toDate < fromDate) return toast.error('Pick a valid date range');
     if (startTime >= dueTime) return toast.error('Deadline must be after start time');
     const days = [...weekdays].sort();
+    const catId = (planProp && planProp.category_id) || person.category_id || null;
     const settings = {
       titles,
       repeat: days.length ? 'custom' : 'daily',
@@ -1739,16 +1740,28 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
     };
     setSaving(true);
     try {
-      if (plan && (plan.user_ids || []).length > 1) {
+      if (asNew || !plan) {
+        // A brand-new assignment for this person — the existing one
+        // (if any) stays untouched, so they get another history row.
+        await api.post('/api/task-schedules', {
+          role: person.role,
+          category_id: catId,
+          user_ids: [person.user_id],
+          ...settings,
+        });
+      } else if ((plan.user_ids || []).length > 1) {
         // Shared plan: split this user out so only they change.
         await api.patch(`/api/task-schedules/${plan.id}`, {
           user_ids: plan.user_ids.filter((u) => u !== person.user_id),
         });
-        await api.post('/api/task-schedules', { role: person.role, user_ids: [person.user_id], ...settings });
-      } else if (plan) {
-        await api.patch(`/api/task-schedules/${plan.id}`, settings);
+        await api.post('/api/task-schedules', {
+          role: person.role,
+          category_id: catId,
+          user_ids: [person.user_id],
+          ...settings,
+        });
       } else {
-        await api.post('/api/task-schedules', { role: person.role, user_ids: [person.user_id], ...settings });
+        await api.patch(`/api/task-schedules/${plan.id}`, settings);
       }
       if (permFrom) {
         await api.post('/api/leave/permission', {
@@ -1758,7 +1771,7 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
           note: 'Permission',
         });
       }
-      toast.success(`Saved changes for ${person.name}`);
+      toast.success(asNew ? `New assignment created for ${person.name}` : `Saved changes for ${person.name}`);
       onSaved();
     } catch (e) {
       toast.error(e.message || 'Save failed');
@@ -1909,14 +1922,24 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="mt-5 flex justify-center gap-2">
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button
             type="button"
-            onClick={save}
+            onClick={() => save(false)}
             disabled={saving || roleTasks === null || plan === undefined}
             className="rounded-xl bg-brand px-6 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button
+            type="button"
+            onClick={() => save(true)}
+            disabled={saving || roleTasks === null || plan === undefined}
+            title="Keep the current assignment and add this as another one"
+            className="rounded-xl border border-[#2563eb] bg-white px-5 py-2.5 text-[13px] font-extrabold text-[#2563eb] transition hover:bg-[#eff6ff] disabled:opacity-40"
+          >
+            <i className="fas fa-plus mr-1.5 text-[11px]" />
+            New Assign Task
           </button>
           <button
             type="button"
