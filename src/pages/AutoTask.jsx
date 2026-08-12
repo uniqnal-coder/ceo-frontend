@@ -631,6 +631,80 @@ export default function AutoTask() {
     }
   };
 
+  // History: one row per plan per person, so a user with two plans shows
+  // two rows and each can be edited or deleted on its own.
+  const planRows = useMemo(() => {
+    if (!plans) return null;
+    const byId = new Map(people.map((p) => [p.id, p]));
+    const rows = [];
+    for (const pl of plans) {
+      const ids = pl.user_ids || [];
+      if (!ids.length) {
+        rows.push({ key: pl.id, plan: pl, uid: null, name: `All ${pl.role}s`, role: pl.role });
+      } else {
+        for (const uid of ids) {
+          const per = byId.get(uid);
+          rows.push({
+            key: `${pl.id}:${uid}`,
+            plan: pl,
+            uid,
+            name: per?.name || 'Removed user',
+            role: per?.role || pl.role,
+          });
+        }
+      }
+    }
+    rows.sort(
+      (a, b) =>
+        a.name.localeCompare(b.name) ||
+        String(b.plan.created_at || '').localeCompare(String(a.plan.created_at || ''))
+    );
+    return rows;
+  }, [plans, people]);
+
+  // People with one-time tasks only (no plan) keep a single legacy row.
+  const noPlanHistory = useMemo(() => {
+    if (!history) return null;
+    if (!plans) return history;
+    const inPlan = new Set(plans.flatMap((pl) => pl.user_ids || []));
+    return history.filter((p) => !inPlan.has(p.user_id));
+  }, [history, plans]);
+
+  // No-plan rows: deleting clears the person's not-yet-completed one-time
+  // tasks (completed work stays for reports).
+  const clearOneTime = async (p) => {
+    if (!confirm(`Delete ${p.name}'s assigned tasks that are not completed yet? Completed work stays.`)) return;
+    try {
+      const r = await api.del(`/api/staff-tasks/user/${p.user_id}/open`);
+      toast.success(`Removed ${r.deleted ?? ''} open task${r.deleted === 1 ? '' : 's'} for ${p.name}`);
+      loadHistory();
+      loadPlans();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
+    }
+  };
+
+  const deletePlanRow = async (row) => {
+    const shared = row.uid && (row.plan.user_ids || []).length > 1;
+    const msg = shared
+      ? `Remove ${row.name} from this plan? The other people keep it.`
+      : 'Delete this plan? Already-created tasks stay.';
+    if (!confirm(msg)) return;
+    try {
+      if (shared) {
+        await api.patch(`/api/task-schedules/${row.plan.id}`, {
+          user_ids: row.plan.user_ids.filter((u) => u !== row.uid),
+        });
+      } else {
+        await api.del(`/api/task-schedules/${row.plan.id}`);
+      }
+      toast.success(shared ? `${row.name} removed from the plan` : 'Plan deleted');
+      loadPlans();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
+    }
+  };
+
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
   const dayOptions = Array.from({ length: daysInMonth(year, month) }, (_, i) => i + 1);
   const hourOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -1100,9 +1174,9 @@ export default function AutoTask() {
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Assignment history
             </p>
-            {!history ? (
+            {!planRows && !history ? (
               <p className="py-4 text-center text-[12.5px] text-slate-400">Loading…</p>
-            ) : history.length === 0 ? (
+            ) : (planRows || []).length === 0 && (noPlanHistory || []).length === 0 ? (
               <p className="py-4 text-center text-[12.5px] text-slate-400">No tasks assigned yet</p>
             ) : (
               <div className="overflow-x-auto">
@@ -1111,12 +1185,59 @@ export default function AutoTask() {
                     <tr className="border-b border-slate-100 text-[10.5px] uppercase tracking-wide text-slate-400">
                       <th className="px-2 py-2">User</th>
                       <th className="px-2 py-2">Tasks</th>
-                      <th className="px-2 py-2">Date</th>
+                      <th className="px-2 py-2">Period</th>
                       <th className="px-2 py-2 text-right">Customize</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((p) => (
+                    {(planRows || []).map((row) => (
+                      <tr key={row.key} className="border-b border-slate-50">
+                        <td className="whitespace-nowrap px-2 py-2.5">
+                          <span className="font-extrabold text-slate-700">{row.name}</span>
+                          <span className={`ml-2 rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase ${ROLE_BADGE[row.role] || 'bg-slate-100 text-slate-500'}`}>
+                            {row.role}
+                          </span>
+                          {!row.plan.active && (
+                            <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold uppercase text-slate-400">
+                              Paused
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">
+                          {row.plan.titles?.length
+                            ? `${row.plan.titles.length} Task${row.plan.titles.length === 1 ? '' : 's'}`
+                            : 'Role task list (auto)'}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2.5 text-slate-500">
+                          {formatDayLabel(row.plan.start_date, false)} → {formatDayLabel(row.plan.end_date, false)}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              row.uid
+                                ? setBatchPerson({
+                                    person: { user_id: row.uid, name: row.name, role: row.role },
+                                    plan: row.plan,
+                                  })
+                                : setEditPlan(row.plan)
+                            }
+                            className="rounded-lg bg-[#2563eb] px-4 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:opacity-90"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deletePlanRow(row)}
+                            title={row.uid && (row.plan.user_ids || []).length > 1 ? 'Remove this person from the plan' : 'Delete plan'}
+                            className="ml-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11.5px] font-extrabold text-rose-500 transition hover:bg-rose-50"
+                          >
+                            <i className="fas fa-trash-can" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {(noPlanHistory || []).map((p) => (
                       <tr key={p.user_id} className="border-b border-slate-50">
                         <td className="whitespace-nowrap px-2 py-2.5">
                           <span className="font-extrabold text-slate-700">{p.name}</span>
@@ -1132,13 +1253,21 @@ export default function AutoTask() {
                             ? new Date(`${p.latest}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                             : '—'}
                         </td>
-                        <td className="px-2 py-2.5 text-right">
+                        <td className="whitespace-nowrap px-2 py-2.5 text-right">
                           <button
                             type="button"
-                            onClick={() => setBatchPerson(p)}
+                            onClick={() => setBatchPerson({ person: p, plan: null })}
                             className="rounded-lg bg-[#2563eb] px-4 py-1.5 text-[11.5px] font-extrabold text-white shadow-sm transition hover:opacity-90"
                           >
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => clearOneTime(p)}
+                            title="Delete this person's open one-time tasks"
+                            className="ml-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11.5px] font-extrabold text-rose-500 transition hover:bg-rose-50"
+                          >
+                            <i className="fas fa-trash-can" />
                           </button>
                         </td>
                       </tr>
@@ -1161,7 +1290,8 @@ export default function AutoTask() {
 
       {batchPerson && (
         <BatchEditDialog
-          person={batchPerson}
+          person={batchPerson.person}
+          plan={batchPerson.plan}
           onClose={() => setBatchPerson(null)}
           onSaved={() => { setBatchPerson(null); loadPlans(); loadHistory(); }}
         />
@@ -1472,7 +1602,7 @@ export function PlanEditDialog({ plan, onClose, onSaved }) {
 
 /* ============ Batch editor: one user's plan + permissions ============ */
 
-export function BatchEditDialog({ person, onClose, onSaved }) {
+export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
   const [roleTasks, setRoleTasks] = useState(null);
   const [plan, setPlan] = useState(undefined); // undefined = loading
   const [selected, setSelected] = useState(new Set());
@@ -1491,16 +1621,20 @@ export function BatchEditDialog({ person, onClose, onSaved }) {
       try {
         const [tasksRes, plansRes] = await Promise.all([
           api.get(`/api/role-tasks?role=${person.role}`),
-          api.get('/api/task-schedules'),
+          planProp === undefined ? api.get('/api/task-schedules') : Promise.resolve(null),
         ]);
         if (!live) return;
         const pool = toArray(tasksRes);
         setRoleTasks(pool);
-        // The user's newest plan seeds the form; the rest start from defaults.
-        const mine = toArray(plansRes)
-          .filter((pl) => pl.role === person.role && (pl.user_ids || []).includes(person.user_id))
-          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-        const pl = mine[0] || null;
+        // A specific plan passed in wins (history row); otherwise fall back
+        // to the user's newest plan. null = deliberately create a new plan.
+        let pl = planProp;
+        if (pl === undefined) {
+          const mine = toArray(plansRes)
+            .filter((x) => x.role === person.role && (x.user_ids || []).includes(person.user_id))
+            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+          pl = mine[0] || null;
+        }
         setPlan(pl);
         if (pl) {
           setFromDate(pl.start_date || '');
