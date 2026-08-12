@@ -568,6 +568,24 @@ export default function AutoTask() {
             }
           }
         }
+        // Record this assignment so it gets its own row in Assignment
+        // History (start = end = the one day; the scheduler merges with
+        // the tasks created above instead of duplicating them).
+        try {
+          await api.post('/api/task-schedules', {
+            role: appType,
+            category_id: categoryId || null,
+            period,
+            user_ids: [employeeId],
+            titles: usingList ? [] : titles,
+            repeat: 'daily',
+            weekdays: [],
+            start_date: rangeFrom,
+            end_date: rangeFrom,
+            start_time: startTime,
+            due_time: dueTime,
+          });
+        } catch { /* tasks were assigned; history row is best-effort */ }
         toast.success(
           `Assigned ${items} ${period} task${items === 1 ? '' : 's'}` +
           (skippedCompleted ? ` (${skippedCompleted} already done skipped)` : '')
@@ -597,12 +615,13 @@ export default function AutoTask() {
           due_time: dueTime,
         });
         toast.success(
-          `Recurring plan created` +
-          (r.createdToday ? ` (${r.createdToday} for today)` : '')
+          `Task assigned — repeats until ${rangeTo || 'year end'}` +
+          (r.createdToday ? ` (${r.createdToday} created for today)` : '')
         );
         loadPlans();
       }
       resetForm();
+      loadPlans();
       loadHistory(true);
     } catch (e) {
       toast.error(e.message || 'Save failed');
@@ -1174,7 +1193,7 @@ export default function AutoTask() {
                 className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a5f] px-5 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
                 <i className="fas fa-paper-plane text-[12px]" />
-                {saving ? 'Assigning…' : recurring ? 'Create plan' : 'Assign Task'}
+                {saving ? 'Assigning…' : 'Assign Task'}
               </button>
             </div>
           </div>
