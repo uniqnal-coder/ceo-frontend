@@ -1652,6 +1652,7 @@ export function PlanEditDialog({ plan, onClose, onSaved }) {
 export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
   const [roleTasks, setRoleTasks] = useState(null);
   const [plan, setPlan] = useState(undefined); // undefined = loading
+  const [myPlans, setMyPlans] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -1671,20 +1672,28 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
         const catId = (planProp && planProp.category_id) || person.category_id || null;
         const [tasksRes, plansRes] = await Promise.all([
           api.get(`/api/role-tasks?role=${person.role}${catId ? `&category_id=${catId}` : ''}`),
-          planProp === undefined ? api.get('/api/task-schedules') : Promise.resolve(null),
+          api.get('/api/task-schedules'),
         ]);
         if (!live) return;
-        const pool = toArray(tasksRes);
-        setRoleTasks(pool);
+        let pool = toArray(tasksRes);
+        // Everything this person already has — used to flag duplicates
+        // against the chosen start date.
+        const mine = toArray(plansRes).filter(
+          (x) => x.role === person.role && (x.user_ids || []).includes(person.user_id)
+        );
+        setMyPlans(mine);
         // A specific plan passed in wins (history row); otherwise fall back
         // to the user's newest plan. null = deliberately create a new plan.
         let pl = planProp;
         if (pl === undefined) {
-          const mine = toArray(plansRes)
-            .filter((x) => x.role === person.role && (x.user_ids || []).includes(person.user_id))
-            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-          pl = mine[0] || null;
+          pl = [...mine].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
         }
+        // The plan's own tasks always belong in the list, even when they
+        // predate the category system.
+        for (const t of pl?.titles || []) {
+          if (!pool.some((x) => x.title === t)) pool = [...pool, { id: `plan:${t}`, title: t }];
+        }
+        setRoleTasks(pool);
         setPlan(pl);
         if (pl) {
           setFromDate(pl.start_date || '');
@@ -1710,7 +1719,30 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
   }, [person]);
 
   const pool = roleTasks || [];
-  const allOn = pool.length > 0 && pool.every((t) => selected.has(t.title));
+
+  // Tasks already covered on the chosen start date by the person's OTHER
+  // assignments. Those are locked out so the same day never gets the
+  // same task twice; an auto (role-list) assignment covers every title.
+  const covered = useMemo(() => {
+    const titles = new Set();
+    let all = false;
+    if (!fromDate) return { titles, all };
+    for (const p of myPlans) {
+      if (plan && p.id === plan.id) continue;
+      if (p.active === false) continue;
+      if (!(String(p.start_date) <= fromDate && fromDate <= String(p.end_date))) continue;
+      const ts = p.titles || [];
+      if (!ts.length) all = true;
+      else ts.forEach((t) => titles.add(t));
+    }
+    return { titles, all };
+  }, [myPlans, plan, fromDate]);
+  const ownTitles = useMemo(() => new Set(plan?.titles || []), [plan]);
+  const isCovered = (title) =>
+    !ownTitles.has(title) && (covered.all || covered.titles.has(title));
+  const openTitles = pool.filter((t) => !isCovered(t.title));
+
+  const allOn = openTitles.length > 0 && openTitles.every((t) => selected.has(t.title));
   const start12 = from24h(startTime);
   const due12 = from24h(dueTime);
 
@@ -1723,8 +1755,16 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
     });
 
   const save = async (asNew = false) => {
-    const titles = pool.filter((t) => selected.has(t.title)).map((t) => t.title);
-    if (!titles.length) return toast.error('Select at least one task');
+    const titles = pool
+      .filter((t) => !isCovered(t.title) && selected.has(t.title))
+      .map((t) => t.title);
+    if (!titles.length) {
+      return toast.error(
+        covered.all || covered.titles.size
+          ? `Everything picked is already assigned for ${fromDate || 'that date'} — change the start date or pick other tasks`
+          : 'Select at least one task'
+      );
+    }
     if (!fromDate || !toDate || toDate < fromDate) return toast.error('Pick a valid date range');
     if (startTime >= dueTime) return toast.error('Deadline must be after start time');
     const days = [...weekdays].sort();
@@ -1838,25 +1878,39 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
                     <input
                       type="checkbox"
                       checked={allOn}
-                      onChange={() => setSelected(allOn ? new Set() : new Set(pool.map((t) => t.title)))}
+                      onChange={() => setSelected(allOn ? new Set() : new Set(openTitles.map((t) => t.title)))}
                       className="h-4 w-4 accent-[#2563eb]"
                     />
                     <span className="text-[12px] font-extrabold text-slate-600">{allOn ? 'Deselect all' : 'Select all'}</span>
                     <span className="ml-auto text-[10.5px] font-bold text-slate-400">
-                      {pool.filter((t) => selected.has(t.title)).length}/{pool.length}
+                      {openTitles.filter((t) => selected.has(t.title)).length}/{openTitles.length}
                     </span>
                   </label>
-                  {pool.map((t) => (
-                    <label key={t.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/70">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(t.title)}
-                        onChange={() => toggleTitle(t.title)}
-                        className="h-4 w-4 accent-[#2563eb]"
-                      />
-                      <span className="text-[12.5px] font-semibold text-slate-600">{t.title}</span>
-                    </label>
-                  ))}
+                  {pool.map((t) => {
+                    const dup = isCovered(t.title);
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex items-center gap-2 rounded-lg px-1.5 py-1 ${
+                          dup ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-white/70'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!dup && selected.has(t.title)}
+                          disabled={dup}
+                          onChange={() => toggleTitle(t.title)}
+                          className="h-4 w-4 accent-[#2563eb]"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-600">{t.title}</span>
+                        {dup && (
+                          <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-extrabold uppercase text-slate-500">
+                            Already assigned
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>
