@@ -58,7 +58,7 @@ const isPastDue = (dueAt) => {
   return Number.isFinite(t) && t < Date.now();
 };
 
-function planFiresOn(plan, dayISO) {
+export function planFiresOn(plan, dayISO) {
   if (dayISO < plan.start_date || dayISO > plan.end_date) return false;
   const d = new Date(`${dayISO}T00:00:00`);
   const a = new Date(`${plan.anchor_date}T00:00:00`);
@@ -216,6 +216,8 @@ export default function AutoTask() {
 
   const [saving, setSaving] = useState(false);
   const [plans, setPlans] = useState(null);
+  // Full role task lists — resolve how many tasks an auto plan sends.
+  const [taskPools, setTaskPools] = useState(null);
   const [editPlan, setEditPlan] = useState(null);
   const [batchPerson, setBatchPerson] = useState(null);
   const [view, setView] = useState('assign');
@@ -326,6 +328,10 @@ export default function AutoTask() {
     })();
     loadHistory();
     loadPlans();
+    Promise.all([
+      api.get('/api/role-tasks?role=teacher').catch(() => []),
+      api.get('/api/role-tasks?role=staff').catch(() => []),
+    ]).then(([teacher, staff]) => setTaskPools({ teacher: toArray(teacher), staff: toArray(staff) }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load roles (subjects / staff roles) when type changes.
@@ -1233,9 +1239,25 @@ export default function AutoTask() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">
-                          {row.plan.titles?.length
-                            ? `${row.plan.titles.length} Task${row.plan.titles.length === 1 ? '' : 's'}`
-                            : 'Role task list (auto)'}
+                          {(() => {
+                            let n = row.plan.titles?.length || 0;
+                            let auto = false;
+                            if (!n) {
+                              auto = true;
+                              const pool = taskPools?.[row.plan.role] || [];
+                              n = (row.plan.category_id
+                                ? pool.filter((x) => x.category_id === row.plan.category_id)
+                                : pool
+                              ).length;
+                            }
+                            if (!n) return 'Role task list (auto)';
+                            return (
+                              <>
+                                {n} Task{n === 1 ? '' : 's'}
+                                {auto && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-slate-400">Auto</span>}
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="whitespace-nowrap px-2 py-2.5 text-slate-500">
                           {formatDayLabel(row.plan.start_date, false)} → {formatDayLabel(row.plan.end_date, false)}

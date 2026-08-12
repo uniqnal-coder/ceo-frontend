@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, toArray } from '../api/client'
 import Skeleton from '../components/ui/Skeleton'
-import { PlannerView, PlanEditDialog } from './AutoTask'
+import { PlannerView, PlanEditDialog, planFiresOn } from './AutoTask'
 import { toast } from '../utils/toast'
 
 const ROLE_BADGE = {
@@ -211,6 +211,8 @@ export default function TasksTracking() {
   // Year Planner (moved here from Assign Task)
   const [plans, setPlans] = useState(null)
   const [editPlan, setEditPlan] = useState(null)
+  // Role task lists (per role) — resolve what an auto plan sends each day.
+  const [rolePools, setRolePools] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -239,6 +241,10 @@ export default function TasksTracking() {
   useEffect(() => {
     load()
     loadPlans()
+    Promise.all([
+      api.get('/api/role-tasks?role=teacher').catch(() => []),
+      api.get('/api/role-tasks?role=staff').catch(() => []),
+    ]).then(([teacher, staff]) => setRolePools({ teacher: toArray(teacher), staff: toArray(staff) }))
   }, [])
 
   // Attendance for the selected day (for the person dialog).
@@ -259,7 +265,67 @@ export default function TasksTracking() {
     return () => { live = false }
   }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // People enriched with a day-indexed view of their tasks.
+  const calCellsKey = `${calYear}-${calMonth}`
+
+  // Future days covered by active plans, projected before the scheduler
+  // materializes them — so an assignment for 13→31 Aug shows on the
+  // calendar the moment it is created.
+  const virtualByPerson = useMemo(() => {
+    const out = new Map() // user_id -> Map(day -> items)
+    if (!plans || !data) return out
+    const tISO = todayISO()
+    const first = new Date(calYear, calMonth, 1)
+    const count = new Date(calYear, calMonth + 1, 0).getDate()
+    const days = []
+    for (let d = 1; d <= count; d += 1) {
+      days.push(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+    }
+    if (!days.includes(selectedDate)) days.push(selectedDate)
+    const future = days.filter((d) => d > tISO)
+    if (!future.length) return out
+
+    const titlesFor = (pl, dayISO) => {
+      const dow = new Date(`${dayISO}T00:00:00`).getDay()
+      const bucket = pl.day_titles && pl.day_titles[String(dow)]
+      if (Array.isArray(bucket) && bucket.length) return bucket
+      if (pl.titles?.length) return pl.titles
+      const pool = rolePools?.[pl.role] || []
+      const scoped = pl.category_id ? pool.filter((x) => x.category_id === pl.category_id) : pool
+      return scoped.map((x) => x.title)
+    }
+
+    for (const pl of plans) {
+      if (pl.active === false) continue
+      for (const day of future) {
+        if (!planFiresOn(pl, day)) continue
+        const titles = titlesFor(pl, day)
+        if (!titles.length) continue
+        for (const p of data.people || []) {
+          const targeted = pl.user_ids?.length ? pl.user_ids.includes(p.user_id) : pl.role === p.role
+          if (!targeted) continue
+          if (!out.has(p.user_id)) out.set(p.user_id, new Map())
+          const dm = out.get(p.user_id)
+          if (!dm.has(day)) dm.set(day, [])
+          const list = dm.get(day)
+          for (const title of titles) {
+            if (!list.some((x) => x.title === title)) {
+              list.push({
+                id: `v:${pl.id}:${day}:${title}`,
+                title,
+                status: 'scheduled',
+                virtual: true,
+                due_at: `${day}T${pl.due_time || '17:00'}:00`,
+              })
+            }
+          }
+        }
+      }
+    }
+    return out
+  }, [plans, rolePools, data, calCellsKey, selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // People enriched with a day-indexed view of their tasks. Real tasks
+  // win; scheduled projections fill days that have nothing yet.
   const enriched = useMemo(() => {
     return (data?.people || []).map((p) => {
       const itemsByDay = new Map()
@@ -269,9 +335,15 @@ export default function TasksTracking() {
         if (!itemsByDay.has(day)) itemsByDay.set(day, [])
         itemsByDay.get(day).push(t)
       }
+      const vm = virtualByPerson.get(p.user_id)
+      if (vm) {
+        for (const [day, items] of vm) {
+          if (!itemsByDay.has(day)) itemsByDay.set(day, items)
+        }
+      }
       return { ...p, itemsByDay }
     })
-  }, [data])
+  }, [data, virtualByPerson])
 
   // Calendar cells: per-day totals across everyone.
   const dayTotals = useMemo(() => {
