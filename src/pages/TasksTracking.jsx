@@ -200,7 +200,7 @@ export default function TasksTracking() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all') // all | pending | overdue | done
-  const [view, setView] = useState('tracking') // tracking | planner
+  const view = 'tracking' // Year Planner removed — Tracking projects plans itself
   const [selectedDate, setSelectedDate] = useState(todayISO())
   const now = new Date()
   const [calYear, setCalYear] = useState(now.getFullYear())
@@ -428,20 +428,6 @@ export default function TasksTracking() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-xl border border-slate-200 bg-white p-1">
-            {[['tracking', 'fa-list-check', 'Tracking'], ['planner', 'fa-calendar-days', 'Year Planner']].map(([key, icon, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setView(key)}
-                className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12.5px] font-extrabold transition ${
-                  view === key ? 'bg-[#1e3a5f] text-white' : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                <i className={`fas ${icon} text-[11px]`} /> {label}
-              </button>
-            ))}
-          </div>
           <Link
             to="/auto-task"
             className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-600 hover:bg-slate-50"
@@ -457,15 +443,6 @@ export default function TasksTracking() {
           </button>
         </div>
       </div>
-
-      {view === 'planner' && (
-        <PlannerView
-          plans={plans || []}
-          people={(data?.people || []).map((p) => ({ id: p.user_id, name: p.name, role: p.role }))}
-          onEditPlan={setEditPlan}
-          onTogglePlan={togglePlan}
-        />
-      )}
 
       {view === 'tracking' && loading && (
         <div className="space-y-3">

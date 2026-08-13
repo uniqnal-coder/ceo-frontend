@@ -452,7 +452,9 @@ export default function AutoTask() {
 
   // An end date after the start, or any weekday picked, means a plan.
   const recurring = (!!rangeTo && rangeTo !== rangeFrom) || repeatDays.size > 0;
-  const usingList = recurring && followList;
+  // Assignments always store the exact tasks that were checked, so the
+  // history shows a real number and Edit re-checks only those.
+  const usingList = false;
   const scheduledSlotCount = useMemo(
     () => Object.values(dayPlan).reduce((n, t) => n + (t?.length || 0), 0),
     [dayPlan]
@@ -2030,16 +2032,6 @@ export function BatchEditDialog({ person, plan: planProp, onClose, onSaved }) {
             className="rounded-xl bg-brand px-6 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Save Changes'}
-          </button>
-          <button
-            type="button"
-            onClick={() => save(true)}
-            disabled={saving || roleTasks === null || plan === undefined}
-            title="Keep the current assignment and add this as another one"
-            className="rounded-xl border border-[#2563eb] bg-white px-5 py-2.5 text-[13px] font-extrabold text-[#2563eb] transition hover:bg-[#eff6ff] disabled:opacity-40"
-          >
-            <i className="fas fa-plus mr-1.5 text-[11px]" />
-            New Assign Task
           </button>
           <button
             type="button"
