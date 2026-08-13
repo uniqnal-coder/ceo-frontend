@@ -7,6 +7,7 @@ const PERIODS = {
   daily: { label: 'Daily', hint: 'Tap a person to see their day — progress, pending & overdue' },
   weekly: { label: 'Weekly', hint: 'Monday–Sunday rollup per person for the selected week' },
   monthly: { label: 'Monthly', hint: 'Full-month progress per person for the selected month' },
+  custom: { label: 'Custom', hint: 'Pick any date range — for reporting and download' },
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -56,6 +57,8 @@ export default function PeriodReports() {
   const period = PERIODS[raw] ? raw : 'daily'
   const meta = PERIODS[period]
   const [date, setDate] = useState(params.get('date') || todayISO())
+  const [customFrom, setCustomFrom] = useState(params.get('from') || `${todayISO().slice(0, 8)}01`)
+  const [customTo, setCustomTo] = useState(params.get('to') || todayISO())
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -75,8 +78,17 @@ export default function PeriodReports() {
     setLoading(true)
     setError('')
     setSelectedId(null)
+    if (period === 'custom' && (!customFrom || !customTo || customTo < customFrom)) {
+      setLoading(false)
+      setData(null)
+      return undefined
+    }
     api
-      .get(`/api/reports/period?period=${period}&date=${date}`)
+      .get(
+        period === 'custom'
+          ? `/api/reports/period?period=custom&from=${customFrom}&to=${customTo}`
+          : `/api/reports/period?period=${period}&date=${date}`
+      )
       .then((d) => {
         if (!live) return
         setData(d)
@@ -91,7 +103,57 @@ export default function PeriodReports() {
     return () => {
       live = false
     }
-  }, [period, date])
+  }, [period, date, customFrom, customTo])
+
+  const downloadCSV = () => {
+    if (!data) return
+    const esc = (v) => {
+      const str = String(v ?? '')
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+    }
+    const lines = []
+    lines.push(['HRNAL report', `${data.from} to ${data.to}`].map(esc).join(','))
+    lines.push(['Generated', new Date().toLocaleString()].map(esc).join(','))
+    lines.push('')
+    lines.push(
+      ['Name', 'Role', 'Progress %', 'Completed', 'Pending', 'Overdue', 'Total tasks', 'Days present', 'Status']
+        .map(esc)
+        .join(',')
+    )
+    for (const p of data.people || []) {
+      const g = p.progress || {}
+      lines.push(
+        [
+          p.name,
+          p.role,
+          g.percent ?? 0,
+          g.completed ?? 0,
+          g.pending ?? 0,
+          g.overdue ?? 0,
+          g.total ?? 0,
+          p.attendance?.days_present ?? (p.attendance?.status === 'present' || p.attendance?.status === 'late' ? 1 : 0),
+          p.attendance?.status || '',
+        ]
+          .map(esc)
+          .join(',')
+      )
+    }
+    if (data.faults?.length) {
+      lines.push('')
+      lines.push(['Faults'].map(esc).join(','))
+      lines.push(['Name', 'Amount', 'Date', 'Reason'].map(esc).join(','))
+      for (const f of data.faults) {
+        lines.push([f.name || f.staff_name || '', f.amount ?? f.punish ?? '', f.date || '', f.reason || f.note || ''].map(esc).join(','))
+      }
+    }
+    // BOM so Excel opens Kurdish/Arabic text correctly.
+    const blob = new Blob([`\ufeff${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `HRNAL-report-${data.from}_to_${data.to}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   const s = data?.summary
   const selected = useMemo(
@@ -146,18 +208,58 @@ export default function PeriodReports() {
             ))}
           </div>
         </div>
-        <input
-          type="date"
-          value={date}
-          max={todayISO()}
-          onChange={(e) => {
-            setDate(e.target.value)
-            const q = new URLSearchParams(params)
-            q.set('date', e.target.value)
-            setParams(q)
-          }}
-          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] outline-none focus:border-brand"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {period === 'custom' ? (
+            <>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => {
+                  setCustomFrom(e.target.value)
+                  const q = new URLSearchParams(params)
+                  q.set('from', e.target.value)
+                  setParams(q)
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] outline-none focus:border-brand"
+              />
+              <span className="text-[12px] font-bold text-slate-400">to</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(e) => {
+                  setCustomTo(e.target.value)
+                  const q = new URLSearchParams(params)
+                  q.set('to', e.target.value)
+                  setParams(q)
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] outline-none focus:border-brand"
+              />
+            </>
+          ) : (
+            <input
+              type="date"
+              value={date}
+              max={todayISO()}
+              onChange={(e) => {
+                setDate(e.target.value)
+                const q = new URLSearchParams(params)
+                q.set('date', e.target.value)
+                setParams(q)
+              }}
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[13px] outline-none focus:border-brand"
+            />
+          )}
+          <button
+            type="button"
+            onClick={downloadCSV}
+            disabled={!data}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-[12.5px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+          >
+            <i className="fas fa-download text-[11px]" />
+            Download
+          </button>
+        </div>
       </div>
 
       {error && <p className="mb-4 text-center text-[13px] text-red-500">{error}</p>}
