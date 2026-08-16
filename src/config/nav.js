@@ -43,16 +43,9 @@ export const navGroups = [
     ],
   },
   {
-    title: 'Operations',
-    items: [
-      { to: '/biometry', label: 'Fingerprints', short: 'Biometry', icon: 'fa-fingerprint' },
-    ],
-  },
-  {
     title: 'Engagement',
     items: [
       { to: '/announcements', label: 'Announcements', short: 'Announce', icon: 'fa-bullhorn' },
-      { to: '/feedback', label: 'Feedback', short: 'Feedback', icon: 'fa-comments' },
     ],
   },
   {

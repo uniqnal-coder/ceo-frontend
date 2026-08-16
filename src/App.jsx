@@ -9,9 +9,7 @@ import RoleCategories from './pages/RoleCategories';
 import Archive from './pages/Archive';
 import Tasks from './pages/Tasks';
 import AutoTask from './pages/AutoTask';
-import Feedback from './pages/Feedback';
 import Salary from './pages/Salary';
-import Biometry from './pages/Biometry';
 import Announcements from './pages/Announcements';
 import Attendance from './pages/Attendance';
 import PeriodReports from './pages/PeriodReports';
@@ -34,9 +32,9 @@ export default function App() {
           <Route path="/archive" element={<Archive />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/auto-task" element={<AutoTask />} />
-          <Route path="/feedback" element={<Feedback />} />
+          <Route path="/feedback" element={<Navigate to="/" replace />} />
           <Route path="/salary" element={<Salary />} />
-          <Route path="/biometry" element={<Biometry />} />
+          <Route path="/biometry" element={<Navigate to="/" replace />} />
           <Route path="/evaluations" element={<Navigate to="/reports" replace />} />
           <Route path="/today" element={<Navigate to="/attendance" replace />} />
           <Route path="/attendance" element={<Attendance />} />
