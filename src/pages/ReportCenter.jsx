@@ -32,7 +32,7 @@ const TYPES = [
   { key: 'feedback', label: 'Feedback', hint: 'Entered notes' },
 ]
 
-const fmtMoney = (n) => `$${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+const fmtMoney = (n) => `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} IQD`
 const fmtRange = (from, to) => {
   const f = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   return `${f(from)} – ${f(to)}, ${to.slice(0, 4)}`
@@ -105,7 +105,7 @@ export default function ReportCenter() {
     lines.push('')
     lines.push(
       ['Name', 'Role', 'Score', 'Severity', 'Attendance raw', 'Monitor raw', 'Tasks raw', 'Feedback raw',
-        'Absent', 'Late', 'Overdue tasks', 'Missed reports', 'Base salary', 'Deduction %', 'Deducted', 'Net pay', 'Top reasons']
+        'Absent', 'Late', 'Overdue tasks', 'Missed reports', 'Base salary (IQD)', 'Deduction %', 'Deducted (IQD)', 'Net pay (IQD)', 'Top reasons']
         .map(esc).join(',')
     )
     for (const p of data.people) {
@@ -458,7 +458,7 @@ function ScoreExplainer({ person, weights }) {
       </p>
       <div className="mt-3 rounded-xl bg-[#eff6ff] p-3">
         <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#1e40af]">
-          <i className="fas fa-dollar-sign mr-1" />
+          <i className="fas fa-coins mr-1" />
           Score sets this period's salary deduction ratio
         </p>
         {person.base_salary > 0 ? (
