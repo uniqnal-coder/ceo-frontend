@@ -6,7 +6,7 @@ export const navGroups = [
     title: 'Overview',
     items: [
       { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
-      { to: '/attendance', label: 'Check-in & Location', short: 'Check-in', icon: 'fa-location-dot' },
+      { to: '/attendance', label: 'Attendance', short: 'Attendance', icon: 'fa-user-check' },
     ],
   },
   {
