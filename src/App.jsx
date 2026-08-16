@@ -13,6 +13,7 @@ import Salary from './pages/Salary';
 import Announcements from './pages/Announcements';
 import Attendance from './pages/Attendance';
 import PeriodReports from './pages/PeriodReports';
+import ReportCenter from './pages/ReportCenter';
 import TasksTracking from './pages/TasksTracking';
 import Settings from './pages/Settings';
 import UserAccounts from './pages/UserAccounts';
@@ -40,7 +41,8 @@ export default function App() {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/daily-reports" element={<Navigate to="/reports" replace />} />
-          <Route path="/reports" element={<PeriodReports />} />
+          <Route path="/reports" element={<ReportCenter />} />
+          <Route path="/reports/classic" element={<PeriodReports />} />
           <Route path="/reports/:period" element={<Navigate to="/reports" replace />} />
           <Route path="/tasks-tracking" element={<TasksTracking />} />
           <Route path="/users" element={<UserAccounts />} />
