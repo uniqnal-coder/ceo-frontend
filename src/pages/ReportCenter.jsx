@@ -78,8 +78,56 @@ export default function ReportCenter() {
   const pages = Math.max(1, Math.ceil(people.length / PAGE))
   const shown = people.slice((page - 1) * PAGE, page * PAGE)
   const top = data?.people?.[0]
-  const s = data?.summary
+  // Everything visible follows the selected report type: for a specific
+  // type the stats/reasons/severity are recomputed from that component.
+  const TYPE_REASONS = {
+    attendance: ['Check-in Fault', 'Verification Fault', 'GPS Fault'],
+    monitor: ['Missed Report'],
+    tasks: ['Late Task'],
+    feedback: ['Feedback Note'],
+  }
+  const punishOf = (p) => {
+    const c = p.components
+    if (type === 'attendance') return c.attendance.absent + c.attendance.late + c.attendance.unverified + c.attendance.offsite
+    if (type === 'monitor') return c.monitor.missing
+    if (type === 'tasks') return c.tasks.overdue
+    if (type === 'feedback') return c.feedback.count
+    return p.punishments
+  }
+  const view = useMemo(() => {
+    if (!data) return null
+    if (type === 'all') {
+      return { summary: data.summary, reasons: data.reasons, severity: data.severity, deltas: true }
+    }
+    const list = data.people
+    const scores = list.map((p) => p.components?.[type]?.raw ?? 0)
+    const sevCount = {}
+    for (const sc of scores) {
+      const k = severityKeyOf(sc)
+      sevCount[k] = (sevCount[k] || 0) + 1
+    }
+    const allowed = new Set(TYPE_REASONS[type])
+    return {
+      summary: {
+        total_records: data.summary.total_records,
+        avg_score: list.length ? Math.round((scores.reduce((a, b) => a + b, 0) / list.length) * 100) / 100 : 0,
+        high_risk: scores.filter((x) => x >= 0.8).length,
+        total_punishments: list.reduce((n, p) => n + punishOf(p), 0),
+        severe: sevCount.severe || 0,
+      },
+      reasons: data.reasons.filter((r) => allowed.has(r.label)),
+      severity: ['severe', 'high', 'medium', 'low', 'info'].map((key) => ({
+        key,
+        count: sevCount[key] || 0,
+        pct: list.length ? Math.round(((sevCount[key] || 0) / list.length) * 1000) / 10 : 0,
+      })),
+      deltas: false,
+    }
+  }, [data, type]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const s = view?.summary
   const prev = data?.prev
+  const dl = (node) => (view?.deltas ? node : null)
 
   const delta = (cur, prv, pct = false) => {
     if (prv == null) return null
@@ -215,28 +263,28 @@ export default function ReportCenter() {
         <>
           {/* Stat cards */}
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <StatCard icon="fa-chart-line" label="Total Records" value={s.total_records.toLocaleString()} extra={delta(s.total_records, prev?.total_records, true)} />
+            <StatCard icon="fa-chart-line" label="Total Records" value={s.total_records.toLocaleString()} extra={dl(delta(s.total_records, prev?.total_records, true))} />
             <StatCard
               icon="fa-gauge" label="Punishment Score (Avg)" value={s.avg_score}
               chip={SEVERITY_META[data.people.length ? severityKeyOf(s.avg_score) : 'info']}
-              extra={delta(s.avg_score, prev?.avg_score)}
+              extra={dl(delta(s.avg_score, prev?.avg_score))}
             />
-            <StatCard icon="fa-user-shield" label="High Risk Users" value={s.high_risk} extra={delta(s.high_risk, prev?.high_risk)} />
-            <StatCard icon="fa-bolt" label="Total Punishments" value={s.total_punishments} extra={delta(s.total_punishments, prev?.total_punishments, true)} />
-            <StatCard icon="fa-triangle-exclamation" label="Severe" value={s.severe} extra={delta(s.severe, prev?.severe)} />
+            <StatCard icon="fa-user-shield" label="High Risk Users" value={s.high_risk} extra={dl(delta(s.high_risk, prev?.high_risk))} />
+            <StatCard icon="fa-bolt" label="Total Punishments" value={s.total_punishments} extra={dl(delta(s.total_punishments, prev?.total_punishments, true))} />
+            <StatCard icon="fa-triangle-exclamation" label="Severe" value={s.severe} extra={dl(delta(s.severe, prev?.severe))} />
           </div>
 
           {/* Charts row */}
           <div className="mb-5 grid gap-4 lg:grid-cols-[1.1fr_0.8fr_1.4fr]">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="mb-3 text-[13.5px] font-extrabold text-slate-800">Punishment by Reason</p>
-              <ReasonDonut reasons={data.reasons} />
+              <ReasonDonut reasons={view.reasons} />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="mb-3 text-[13.5px] font-extrabold text-slate-800">Punishment by Severity</p>
               <div className="space-y-2.5">
-                {data.severity.map((x) => {
+                {view.severity.map((x) => {
                   const m = SEVERITY_META[x.key]
                   return (
                     <div key={x.key} className="flex items-center gap-2">
