@@ -199,7 +199,8 @@ export default function TasksTracking() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all') // all | pending | overdue | done
+  const [filter, setFilter] = useState('') // '' = not chosen | all | pending | overdue | done
+  const [roleF, setRoleF] = useState('') // '' = not chosen | all | teacher | staff
   const view = 'tracking' // Year Planner removed — Tracking projects plans itself
   const [selectedDate, setSelectedDate] = useState(todayISO())
   const now = new Date()
@@ -374,9 +375,12 @@ export default function TasksTracking() {
 
   // People list for the selected date: only those with work that day, with
   // that day's counts. Search + status filters apply to the day view.
+  const trackingActive = !!(search.trim() || filter || roleF)
   const dayPeople = useMemo(() => {
+    if (!trackingActive) return []
     const q = search.trim().toLowerCase()
     return enriched
+      .filter((p) => !(roleF === 'teacher' || roleF === 'staff') || p.role === roleF)
       .map((p) => {
         const items = p.itemsByDay.get(selectedDate) || []
         const done = items.filter((t) => t.status === 'completed')
@@ -398,7 +402,7 @@ export default function TasksTracking() {
         if (b.day.overdue.length !== a.day.overdue.length) return b.day.overdue.length - a.day.overdue.length
         return String(a.name).localeCompare(String(b.name))
       })
-  }, [enriched, selectedDate, search, filter])
+  }, [enriched, selectedDate, search, filter, roleF, trackingActive])
 
   const togglePlan = async (plan) => {
     try {
@@ -548,30 +552,52 @@ export default function TasksTracking() {
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:border-brand"
               />
             </div>
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'pending', label: 'Has pending' },
-              { key: 'overdue', label: 'Has overdue' },
-              { key: 'done', label: 'All done' },
-            ].map((f) => (
+            <select
+              value={roleF}
+              onChange={(e) => setRoleF(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
+            >
+              <option value="">Choose role…</option>
+              <option value="all">Everyone</option>
+              <option value="teacher">Teachers</option>
+              <option value="staff">Staff</option>
+            </select>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
+            >
+              <option value="">Choose status…</option>
+              <option value="all">Any status</option>
+              <option value="pending">Has pending</option>
+              <option value="overdue">Has overdue</option>
+              <option value="done">All done</option>
+            </select>
+            {trackingActive && (
               <button
-                key={f.key}
                 type="button"
-                onClick={() => setFilter(f.key)}
-                className={`rounded-full border px-3 py-1.5 text-[12px] font-bold transition ${
-                  filter === f.key
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                }`}
+                onClick={() => { setSearch(''); setFilter(''); setRoleF('') }}
+                className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50"
               >
-                {f.label}
+                <i className="fas fa-rotate-left mr-1.5" />
+                Clear
               </button>
-            ))}
+            )}
           </div>
 
-          {dayPeople.length === 0 ? (
+          {!trackingActive ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+              <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-brand">
+                <i className="fas fa-magnifying-glass" />
+              </span>
+              <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see staff</p>
+              <p className="mt-1 text-[12.5px] text-slate-400">
+                Pick a role or status, or search a name — the list shows who has work on the selected day.
+              </p>
+            </div>
+          ) : dayPeople.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-[13px] text-slate-400">
-              No tasks on this date{filter !== 'all' ? ' for this filter' : ''}. Tap another day on the calendar.
+              No tasks on this date for this filter. Tap another day on the calendar or clear the filters.
             </div>
           ) : (
             <div className="space-y-2.5">
