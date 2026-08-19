@@ -84,7 +84,7 @@ export default function ReportCenter() {
 
   const pages = Math.max(1, Math.ceil(people.length / PAGE))
   const shown = people.slice((page - 1) * PAGE, page * PAGE)
-  const top = data?.people?.[0]
+  const top = people[0] || null
   // Everything visible follows the selected report type: for a specific
   // type the stats/reasons/severity are recomputed from that component.
   const TYPE_REASONS = {
@@ -103,17 +103,27 @@ export default function ReportCenter() {
   }
   const view = useMemo(() => {
     if (!data) return null
-    if (type === 'all') {
+    const fullSet = type === 'all' && !q.trim()
+    if (fullSet) {
       return { summary: data.summary, reasons: data.reasons, severity: data.severity, deltas: true }
     }
-    const list = data.people
-    const scores = list.map((p) => p.components?.[type]?.raw ?? 0)
+    // Everything recomputed over the filtered people only.
+    const list = people
+    const scores = list.map(scoreOf)
     const sevCount = {}
     for (const sc of scores) {
       const k = severityKeyOf(sc)
       sevCount[k] = (sevCount[k] || 0) + 1
     }
-    const allowed = new Set(TYPE_REASONS[type])
+    const reasonTotals = {}
+    for (const p of list) for (const r of p.reasons) reasonTotals[r.label] = (reasonTotals[r.label] || 0) + r.count
+    let reasons = Object.entries(reasonTotals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => ({ label, count }))
+    if (type !== 'all') {
+      const allowed = new Set(TYPE_REASONS[type])
+      reasons = reasons.filter((r) => allowed.has(r.label))
+    }
     return {
       summary: {
         total_records: data.summary.total_records,
@@ -122,7 +132,7 @@ export default function ReportCenter() {
         total_punishments: list.reduce((n, p) => n + punishOf(p), 0),
         severe: sevCount.severe || 0,
       },
-      reasons: data.reasons.filter((r) => allowed.has(r.label)),
+      reasons,
       severity: ['severe', 'high', 'medium', 'low', 'info'].map((key) => ({
         key,
         count: sevCount[key] || 0,
@@ -130,7 +140,7 @@ export default function ReportCenter() {
       })),
       deltas: false,
     }
-  }, [data, type]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, people, type, q]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const s = view?.summary
   const prev = data?.prev
@@ -279,6 +289,17 @@ export default function ReportCenter() {
 
       {loading || !data ? (
         <p className="py-16 text-center text-[13px] text-slate-400">{loading ? 'Calculating…' : ''}</p>
+      ) : !hasQuery ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
+          <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-brand">
+            <i className="fas fa-magnifying-glass" />
+          </span>
+          <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see the report</p>
+          <p className="mt-1 text-[12.5px] text-slate-400">
+            {data.people.length} people scored this period — search a name, or pick a role or report type. Every card,
+            chart and the table will follow your filter.
+          </p>
+        </div>
       ) : (
         <>
           {/* Stat cards */}
@@ -326,17 +347,7 @@ export default function ReportCenter() {
           {/* Table */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="mb-3 text-[15px] font-extrabold text-slate-800">Punishment Based on Selected Report</p>
-            {!hasQuery ? (
-              <div className="px-6 py-12 text-center">
-                <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-brand">
-                  <i className="fas fa-magnifying-glass" />
-                </span>
-                <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see people</p>
-                <p className="mt-1 text-[12.5px] text-slate-400">
-                  {data.people.length} people scored this period — search a name, or pick a role or report type.
-                </p>
-              </div>
-            ) : people.length === 0 ? (
+            {people.length === 0 ? (
               <p className="px-6 py-10 text-center text-[13px] text-slate-400">No people match these filters.</p>
             ) : (
             <>
