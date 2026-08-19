@@ -41,8 +41,9 @@ const fmtRange = (from, to) => {
 export default function ReportCenter() {
   const [from, setFrom] = useState(monthStartISO())
   const [to, setTo] = useState(todayISO())
-  const [role, setRole] = useState('')
+  const [role, setRole] = useState('') // '' = not chosen yet
   const [type, setType] = useState('all')
+  const [q, setQ] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -55,7 +56,7 @@ export default function ReportCenter() {
     setLoading(true)
     setError('')
     try {
-      const d = await api.get(`/api/reports/center?from=${from}&to=${to}${role ? `&role=${role}` : ''}`)
+      const d = await api.get(`/api/reports/center?from=${from}&to=${to}${role === 'teacher' || role === 'staff' ? `&role=${role}` : ''}`)
       setData(d)
       setPage(1)
     } catch (e) {
@@ -69,11 +70,17 @@ export default function ReportCenter() {
 
   // A specific report type shows that component's own 0–2 score.
   const scoreOf = (p) => (type === 'all' ? p.score : p.components?.[type]?.raw ?? 0)
+  // Same mechanism as the other lists: the people table stays empty
+  // until a search or a filter is used.
+  const hasQuery = !!(q.trim() || role || type !== 'all')
   const people = useMemo(() => {
-    const list = [...(data?.people || [])]
+    if (!hasQuery) return []
+    let list = [...(data?.people || [])]
+    const needle = q.trim().toLowerCase()
+    if (needle) list = list.filter((p) => `${p.name} ${p.id}`.toLowerCase().includes(needle))
     if (type !== 'all') list.sort((a, b) => scoreOf(b) - scoreOf(a) || a.name.localeCompare(b.name))
     return list
-  }, [data, type]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, type, q, hasQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pages = Math.max(1, Math.ceil(people.length / PAGE))
   const shown = people.slice((page - 1) * PAGE, page * PAGE)
@@ -215,6 +222,18 @@ export default function ReportCenter() {
             ))}
           </select>
         </label>
+        <label className="block min-w-[190px] flex-1">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Search</span>
+          <span className="relative block">
+            <i className="fas fa-magnifying-glass pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[12px] text-slate-300" />
+            <input
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setPage(1) }}
+              placeholder="Name or ID…"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+            />
+          </span>
+        </label>
         <label className="block min-w-[130px]">
           <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">User role</span>
           <select
@@ -222,7 +241,8 @@ export default function ReportCenter() {
             onChange={(e) => setRole(e.target.value)}
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
           >
-            <option value="">All Roles</option>
+            <option value="">Choose role…</option>
+            <option value="all">Everyone</option>
             <option value="teacher">Teachers</option>
             <option value="staff">Staff</option>
           </select>
@@ -239,7 +259,7 @@ export default function ReportCenter() {
         </label>
         <button
           type="button"
-          onClick={() => { setFrom(monthStartISO()); setTo(todayISO()); setRole(''); setType('all') }}
+          onClick={() => { setFrom(monthStartISO()); setTo(todayISO()); setRole(''); setType('all'); setQ('') }}
           className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50"
         >
           <i className="fas fa-rotate-left mr-1.5" />
@@ -306,6 +326,20 @@ export default function ReportCenter() {
           {/* Table */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="mb-3 text-[15px] font-extrabold text-slate-800">Punishment Based on Selected Report</p>
+            {!hasQuery ? (
+              <div className="px-6 py-12 text-center">
+                <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-brand">
+                  <i className="fas fa-magnifying-glass" />
+                </span>
+                <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see people</p>
+                <p className="mt-1 text-[12.5px] text-slate-400">
+                  {data.people.length} people scored this period — search a name, or pick a role or report type.
+                </p>
+              </div>
+            ) : people.length === 0 ? (
+              <p className="px-6 py-10 text-center text-[13px] text-slate-400">No people match these filters.</p>
+            ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12.5px]">
                 <thead>
@@ -398,6 +432,8 @@ export default function ReportCenter() {
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         </>
       )}
