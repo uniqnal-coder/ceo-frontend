@@ -10,10 +10,18 @@ export default function Staff() {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
-  const [roleFilter, setRoleFilter] = useState('all')
+  // The list stays empty until the admin searches or picks a filter.
+  const [search, setSearch] = useState('')
+  const [group, setGroup] = useState('') // '' = not chosen yet
+  const [subjectId, setSubjectId] = useState('')
+  const [staffRoleId, setStaffRoleId] = useState('')
+  const [subjects, setSubjects] = useState([])
+  const [staffRoles, setStaffRoles] = useState([])
 
   useEffect(() => {
     fetchStaff()
+    api.get('/api/role-categories?app_role=teacher&active=1').then((d) => setSubjects(toArray(d))).catch(() => {})
+    api.get('/api/role-categories?app_role=staff&active=1').then((d) => setStaffRoles(toArray(d))).catch(() => {})
   }, [])
 
   const fetchStaff = async () => {
@@ -64,12 +72,28 @@ export default function Staff() {
   }
 
   const appRoleOf = (m) => m.users?.role || null
-  const visibleStaff = staff.filter((m) => {
-    if (roleFilter === 'all') return true
-    if (roleFilter === 'teacher') return appRoleOf(m) === 'teacher'
-    if (roleFilter === 'staff') return appRoleOf(m) === 'staff'
-    return !appRoleOf(m) // no login
-  })
+  const hasQuery = !!(search.trim() || group || subjectId || staffRoleId)
+  const visibleStaff = !hasQuery
+    ? []
+    : staff.filter((m) => {
+        if (group === 'teacher' && appRoleOf(m) !== 'teacher') return false
+        if (group === 'staff' && appRoleOf(m) !== 'staff') return false
+        if (group === 'none' && appRoleOf(m)) return false
+        if (subjectId && !(appRoleOf(m) === 'teacher' && m.category_id === subjectId)) return false
+        if (staffRoleId && !(appRoleOf(m) === 'staff' && m.category_id === staffRoleId)) return false
+        const q = search.trim().toLowerCase()
+        if (q) {
+          const hay = `${m.name || ''} ${m.id || ''} ${m.user_id || ''} ${m.email || ''} ${m.phone || ''}`.toLowerCase()
+          if (!hay.includes(q)) return false
+        }
+        return true
+      })
+  const clearFilters = () => {
+    setSearch('')
+    setGroup('')
+    setSubjectId('')
+    setStaffRoleId('')
+  }
 
   return (
     <div style={styles.container}>
@@ -102,40 +126,117 @@ export default function Staff() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 px-1">
-        {[
-          ['all', 'Everyone'],
-          ['teacher', 'Teachers'],
-          ['staff', 'Staff'],
-          ['none', 'No app login'],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setRoleFilter(key)}
-            className={`rounded-full border px-4 py-1.5 text-[12.5px] font-semibold transition ${
-              roleFilter === key
-                ? 'border-brand bg-brand text-white'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
+      <div className="mb-4 flex flex-wrap items-end gap-2.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label className="block min-w-[220px] flex-1">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Search</span>
+          <span className="relative block">
+            <i className="fas fa-magnifying-glass pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[12px] text-slate-300" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Name or ID…"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+            />
+          </span>
+        </label>
+        <label className="block min-w-[150px]">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Group</span>
+          <select
+            value={group}
+            onChange={(e) => {
+              setGroup(e.target.value)
+              if (e.target.value === 'teacher') setStaffRoleId('')
+              if (e.target.value === 'staff' || e.target.value === 'none') setSubjectId('')
+            }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
           >
-            {label}
+            <option value="">Choose group…</option>
+            <option value="all">Everyone</option>
+            <option value="teacher">Teachers</option>
+            <option value="staff">Staff</option>
+            <option value="none">No app login</option>
+          </select>
+        </label>
+        <label className="block min-w-[160px]">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Subject</span>
+          <select
+            value={subjectId}
+            onChange={(e) => {
+              setSubjectId(e.target.value)
+              if (e.target.value) {
+                setGroup('teacher')
+                setStaffRoleId('')
+              }
+            }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
+          >
+            <option value="">All subjects</option>
+            {subjects.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-[160px]">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Staff role</span>
+          <select
+            value={staffRoleId}
+            onChange={(e) => {
+              setStaffRoleId(e.target.value)
+              if (e.target.value) {
+                setGroup('staff')
+                setSubjectId('')
+              }
+            }}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-brand"
+          >
+            <option value="">All staff roles</option>
+            {staffRoles.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        {hasQuery && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50"
+          >
+            <i className="fas fa-rotate-left mr-1.5" />
+            Clear
           </button>
-        ))}
+        )}
+        {hasQuery && (
+          <span className="h-10 content-center self-end text-[12px] font-bold text-slate-400">
+            {visibleStaff.length} of {staff.length}
+          </span>
+        )}
       </div>
 
       {loading && <p style={styles.loading}>Loading staff...</p>}
       {error && <p style={styles.error}>❌ {error}</p>}
 
-      {!loading && visibleStaff.length === 0 && !error && (
+      {!loading && !error && !hasQuery && (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+          <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-brand">
+            <i className="fas fa-magnifying-glass" />
+          </span>
+          <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see people</p>
+          <p className="mt-1 text-[12.5px] text-slate-400">
+            {staff.length} people on file — search by name or ID, or filter by group, subject or staff role.
+          </p>
+        </div>
+      )}
+
+      {!loading && hasQuery && visibleStaff.length === 0 && !error && (
         <div style={styles.empty} className="empty-state">
-          <p>📋 No people found</p>
+          <p>📋 No people match these filters</p>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={clearFilters}
             style={styles.emptyButton}
             className="inline-flex items-center gap-2"
           >
-            <i className="fas fa-plus" />
-            Add first person
+            <i className="fas fa-rotate-left" />
+            Clear filters
           </button>
         </div>
       )}
