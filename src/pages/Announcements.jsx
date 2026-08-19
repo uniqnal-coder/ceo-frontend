@@ -20,6 +20,8 @@ export default function Announcements() {
   const [type, setType] = useState('general')
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
+  const [image, setImage] = useState(null) // File
+  const [preview, setPreview] = useState(null)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(null)
   // History is filter-first: nothing listed until a search/filter is used.
@@ -71,20 +73,48 @@ export default function Announcements() {
       .slice(0, 30)
   }, [grouped, histQ, histType, histActive])
 
+  const pickImage = (file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) return toast.error('Only images can be attached')
+    if (file.size > 5 * 1024 * 1024) return toast.error('Image must be under 5 MB')
+    setImage(file)
+    setPreview(URL.createObjectURL(file))
+  }
+  const clearImage = () => {
+    if (preview) URL.revokeObjectURL(preview)
+    setImage(null)
+    setPreview(null)
+  }
+
   const send = async (e) => {
     e.preventDefault()
     if (!title.trim() || !message.trim()) return
     setSending(true)
     try {
-      const res = await api.post('/api/notifications/broadcast', {
-        audience,
-        type,
-        title: title.trim(),
-        message: message.trim(),
-      })
+      let res
+      if (image) {
+        const fd = new FormData()
+        fd.append('audience', audience)
+        fd.append('type', type)
+        fd.append('title', title.trim())
+        fd.append('message', message.trim())
+        fd.append('image', image)
+        res = await api.post('/api/notifications/broadcast', fd)
+      } else {
+        res = await api.post('/api/notifications/broadcast', {
+          audience,
+          type,
+          title: title.trim(),
+          message: message.trim(),
+        })
+      }
       toast.success(`Announcement sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}`)
+      if (res.imageDropped) {
+        toast.error('Image was not saved — the image_url column is missing (run the migration)')
+      }
       setTitle('')
       setMessage('')
+      clearImage()
       loadSent()
     } catch (err) {
       toast.error(err.message)
@@ -160,6 +190,33 @@ export default function Announcements() {
             maxLength={600}
             className="mb-4 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-[13.5px] outline-none focus:border-brand"
           />
+          <div className="mb-4">
+            {preview ? (
+              <div className="relative inline-block">
+                <img src={preview} alt="attachment" className="max-h-40 rounded-xl border border-slate-200" />
+                <button
+                  type="button"
+                  onClick={clearImage}
+                  title="Remove image"
+                  className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-[11px] text-white shadow hover:bg-rose-600"
+                >
+                  <i className="fas fa-xmark" />
+                </button>
+              </div>
+            ) : (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-[12.5px] font-bold text-slate-500 transition hover:border-brand hover:text-brand">
+                <i className="fas fa-image" />
+                Attach image (optional)
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { pickImage(e.target.files?.[0]); e.target.value = '' }}
+                />
+              </label>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={sending}
@@ -237,6 +294,9 @@ export default function Announcements() {
                     {g.count} sent
                   </span>
                 </div>
+                {g.image_url && (
+                  <img src={g.image_url} alt="" className="mt-1 mb-1 max-h-24 rounded-lg border border-slate-200 object-cover" />
+                )}
                 <p className="line-clamp-2 text-[11.5px] text-slate-500">{g.message}</p>
                 <p className="mt-1 text-[10.5px] text-slate-400">
                   {new Date(g.created_at).toLocaleString('en-GB', {
