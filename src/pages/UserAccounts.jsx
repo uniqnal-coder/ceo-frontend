@@ -53,8 +53,8 @@ const genPassword = () => {
 export default function UserAccounts() {
   const [users, setUsers] = useState(null);
   const [q, setQ] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState(''); // '' = not chosen yet
+  const [statusFilter, setStatusFilter] = useState('');
   const [editUser, setEditUser] = useState(null);
   const [pwUser, setPwUser] = useState(null);
   const me = useMemo(() => {
@@ -90,19 +90,26 @@ export default function UserAccounts() {
     };
   }, [users]);
 
+  const hasQuery = !!(q.trim() || roleFilter || statusFilter);
   const shown = useMemo(() => {
+    if (!hasQuery) return [];
     const needle = q.trim().toLowerCase();
     return (users || []).filter((u) => {
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (roleFilter && roleFilter !== 'all' && u.role !== roleFilter) return false;
       if (statusFilter === 'active' && (u.blocked || u.is_archived)) return false;
       if (statusFilter === 'blocked' && !u.blocked) return false;
       if (needle) {
-        const hay = `${u.name || ''} ${u.email || ''} ${u.phone || ''}`.toLowerCase();
+        const hay = `${u.name || ''} ${u.email || ''} ${u.phone || ''} ${u.id || ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [users, q, roleFilter, statusFilter]);
+  }, [users, q, roleFilter, statusFilter, hasQuery]);
+  const clearFilters = () => {
+    setQ('');
+    setRoleFilter('');
+    setStatusFilter('');
+  };
 
   const toggleBlock = async (u) => {
     const key = `block:${u.id}`;
@@ -129,11 +136,6 @@ export default function UserAccounts() {
       toast.error(e.message || 'Delete failed');
     }
   };
-
-  const roleChips = [
-    ['all', `All · ${stats.total}`],
-    ...Object.entries(ROLE_META).map(([k, m]) => [k, `${m.label} · ${(users || []).filter((u) => u.role === k).length}`]),
-  ];
 
   return (
     <div className="mx-auto max-w-6xl p-5">
@@ -178,50 +180,91 @@ export default function UserAccounts() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <i className="fas fa-magnifying-glass pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[12px] text-slate-300" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name, email or phone…"
-            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15"
-          />
-        </div>
-        {roleChips.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setRoleFilter(key)}
-            className={`rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition ${
-              roleFilter === key ? 'border-[#2563eb] bg-[#2563eb] text-white' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-            }`}
+      {/* Filters — the list stays empty until one is used */}
+      <div className="mb-4 flex flex-wrap items-end gap-2.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label className="block min-w-[220px] flex-1">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Search</span>
+          <span className="relative block">
+            <i className="fas fa-magnifying-glass pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[12px] text-slate-300" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Name, email, phone or ID…"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15"
+            />
+          </span>
+        </label>
+        <label className="block min-w-[150px]">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Role</span>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-[#2563eb]"
           >
-            {label}
-          </button>
-        ))}
-        <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block" />
-        {[['all', 'Any status'], ['active', 'Active'], ['blocked', 'Blocked']].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setStatusFilter(key)}
-            className={`rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition ${
-              statusFilter === key ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-            }`}
+            <option value="">Choose role…</option>
+            <option value="all">Everyone · {stats.total}</option>
+            {Object.entries(ROLE_META).map(([k, m]) => (
+              <option key={k} value={k}>
+                {m.label} · {(users || []).filter((u) => u.role === k).length}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-[140px]">
+          <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Status</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-[#2563eb]"
           >
-            {label}
+            <option value="">Any status</option>
+            <option value="active">Active</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </label>
+        {hasQuery && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50"
+          >
+            <i className="fas fa-rotate-left mr-1.5" />
+            Clear
           </button>
-        ))}
+        )}
+        {hasQuery && (
+          <span className="h-10 content-center text-[12px] font-bold text-slate-400">
+            {shown.length} of {stats.total}
+          </span>
+        )}
       </div>
 
       {/* Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {!users ? (
           <p className="py-12 text-center text-[13px] text-slate-400">Loading accounts…</p>
+        ) : !hasQuery ? (
+          <div className="px-6 py-14 text-center">
+            <span className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-[22px] text-[#2563eb]">
+              <i className="fas fa-magnifying-glass" />
+            </span>
+            <p className="text-[15px] font-extrabold text-slate-700">Search or choose a filter to see accounts</p>
+            <p className="mt-1 text-[12.5px] text-slate-400">
+              {stats.total} accounts on file — search by name, email, phone or ID, or filter by role and status.
+            </p>
+          </div>
         ) : shown.length === 0 ? (
-          <p className="py-12 text-center text-[13px] text-slate-400">No accounts match.</p>
+          <div className="px-6 py-12 text-center">
+            <p className="text-[13px] text-slate-400">No accounts match these filters.</p>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[12.5px] font-bold text-slate-500 hover:bg-slate-50"
+            >
+              <i className="fas fa-rotate-left mr-1.5" />
+              Clear filters
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12.5px]">
