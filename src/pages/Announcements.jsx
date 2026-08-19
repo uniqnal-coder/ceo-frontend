@@ -105,44 +105,42 @@ export default function Announcements() {
       <div className="grid gap-5 lg:grid-cols-5">
         {/* Composer */}
         <form onSubmit={send} className="lg:col-span-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Send to</p>
-          <div className="mb-4 flex gap-2">
-            {AUDIENCES.map((a) => (
-              <button
-                key={a.key}
-                type="button"
-                onClick={() => setAudience(a.key)}
-                className={`flex-1 rounded-xl border px-3 py-2.5 text-[12.5px] font-semibold transition ${
-                  audience === a.key
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <i className={`fas ${a.icon} mr-1.5`} />
-                {a.label}
-              </button>
-            ))}
-          </div>
-
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Category</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {TYPES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setType(t.key)}
-                className={`rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition ${
-                  type === t.key ? 'text-white' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-                style={
-                  type === t.key
-                    ? { backgroundColor: t.color, borderColor: t.color }
-                    : { borderColor: '#e2e8f0' }
-                }
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">Send to</span>
+              <span className="relative block">
+                <i className={`fas ${AUDIENCES.find((a) => a.key === audience)?.icon || 'fa-users'} pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-brand`} />
+                <select
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-8 text-[13px] font-bold text-slate-700 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+                >
+                  {AUDIENCES.map((a) => (
+                    <option key={a.key} value={a.key}>{a.label}</option>
+                  ))}
+                </select>
+                <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-slate-400" />
+              </span>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">Category</span>
+              <span className="relative block">
+                <span
+                  className="pointer-events-none absolute top-1/2 left-3.5 h-2.5 w-2.5 -translate-y-1/2 rounded-full"
+                  style={{ backgroundColor: (TYPES.find((t) => t.key === type) || TYPES[0]).color }}
+                />
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-[13px] font-bold text-slate-700 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
+                >
+                  {TYPES.map((t) => (
+                    <option key={t.key} value={t.key}>{t.label}</option>
+                  ))}
+                </select>
+                <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-slate-400" />
+              </span>
+            </label>
           </div>
 
           <input
