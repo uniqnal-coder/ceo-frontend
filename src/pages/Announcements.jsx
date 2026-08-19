@@ -22,6 +22,9 @@ export default function Announcements() {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(null)
+  // History is filter-first: nothing listed until a search/filter is used.
+  const [histQ, setHistQ] = useState('')
+  const [histType, setHistType] = useState('')
 
   const loadSent = async () => {
     try {
@@ -52,8 +55,21 @@ export default function Announcements() {
         groups.push({ ...n, count: 1 })
       }
     }
-    return groups.slice(0, 20)
+    return groups
   }, [sent])
+
+  const histActive = !!(histQ.trim() || histType)
+  const shownHistory = useMemo(() => {
+    if (!grouped || !histActive) return []
+    const q = histQ.trim().toLowerCase()
+    return grouped
+      .filter((g) => {
+        if (histType && histType !== 'all' && g.type !== histType) return false
+        if (q && !`${g.title} ${g.message}`.toLowerCase().includes(q)) return false
+        return true
+      })
+      .slice(0, 30)
+  }, [grouped, histQ, histType, histActive])
 
   const send = async (e) => {
     e.preventDefault()
@@ -157,13 +173,60 @@ export default function Announcements() {
 
         {/* History */}
         <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="mb-3 text-[13px] font-bold text-slate-700">Recently sent</p>
+          <p className="mb-3 text-[13px] font-bold text-slate-700">Sent announcements</p>
+          <div className="mb-3 flex gap-2">
+            <span className="relative min-w-0 flex-1">
+              <i className="fas fa-magnifying-glass pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[11px] text-slate-300" />
+              <input
+                value={histQ}
+                onChange={(e) => setHistQ(e.target.value)}
+                placeholder="Search title or message…"
+                className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-[12.5px] outline-none focus:border-brand"
+              />
+            </span>
+            <select
+              value={histType}
+              onChange={(e) => setHistType(e.target.value)}
+              className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-[12px] font-bold text-slate-600 outline-none focus:border-brand"
+            >
+              <option value="">Category…</option>
+              <option value="all">All</option>
+              {TYPES.map((t) => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+            {histActive && (
+              <button
+                type="button"
+                onClick={() => { setHistQ(''); setHistType('') }}
+                title="Clear"
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-500 hover:bg-slate-50"
+              >
+                <i className="fas fa-rotate-left" />
+              </button>
+            )}
+          </div>
           {grouped === null && <p className="py-6 text-center text-[12.5px] text-slate-400">Loading…</p>}
           {grouped?.length === 0 && (
             <p className="py-6 text-center text-[12.5px] text-slate-400">Nothing sent yet.</p>
           )}
+          {grouped?.length > 0 && !histActive && (
+            <div className="py-8 text-center">
+              <span className="mb-2 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[#eff6ff] text-[16px] text-brand">
+                <i className="fas fa-magnifying-glass" />
+              </span>
+              <p className="text-[12.5px] font-bold text-slate-600">Search or pick a category to see history</p>
+              <p className="mt-0.5 text-[11.5px] text-slate-400">{grouped.length} announcement{grouped.length === 1 ? '' : 's'} sent so far</p>
+            </div>
+          )}
+          {histActive && shownHistory.length === 0 && grouped?.length > 0 && (
+            <p className="py-6 text-center text-[12.5px] text-slate-400">No announcements match.</p>
+          )}
+          {histActive && shownHistory.length > 0 && (
+            <p className="mb-2 text-[10.5px] font-bold text-slate-400">{shownHistory.length} of {grouped.length}</p>
+          )}
           <div className="space-y-3">
-            {grouped?.map((g) => (
+            {shownHistory.map((g) => (
               <div key={g.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <div className="mb-0.5 flex items-center justify-between gap-2">
                   <p className="truncate text-[12.5px] font-bold text-slate-700">{g.title}</p>
