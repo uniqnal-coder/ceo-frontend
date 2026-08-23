@@ -157,8 +157,6 @@ export default function Attendance() {
 
       <OfficeLocationCard office={office} onChanged={load} />
 
-      <EnrollmentSelfiesCard />
-
       {/* Log */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Attendance log</p>
@@ -293,91 +291,6 @@ export default function Attendance() {
 }
 
 /* ---- Office location: anchors the on-site / off-site flags ---- */
-/**
- * One-time enrollment selfies captured in the app. Every check-in selfie is
- * compared against these; clearing one approves a staff change request.
- */
-function EnrollmentSelfiesCard() {
-  const [data, setData] = useState(null)
-  const [error, setError] = useState('')
-
-  const load = () => {
-    api
-      .get('/api/checkins/enrollment/all')
-      .then(setData)
-      .catch((err) => setError(err.message))
-  }
-  useEffect(() => {
-    load()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const clear = async (p) => {
-    if (!window.confirm(`Clear ${p.name}'s enrollment selfie so they can capture a new one?`)) return
-    try {
-      await api.del(`/api/checkins/enrollment-selfie/${p.user_id}`)
-      load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const people = data?.people || []
-  const withSelfie = people.filter((p) => p.selfie_url)
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-          Enrollment selfies
-        </p>
-        <span className="text-[12px] font-semibold text-slate-400">
-          {withSelfie.length} of {people.length} enrolled
-        </span>
-      </div>
-      {error && <p className="text-[12.5px] text-danger">{error}</p>}
-      {!data && !error && <p className="text-[12.5px] text-slate-400">Loading…</p>}
-      {data && people.length === 0 && (
-        <p className="text-[12.5px] text-slate-400">No active staff.</p>
-      )}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {people.map((p) => (
-          <div
-            key={p.user_id}
-            className="flex flex-col items-center rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-center"
-          >
-            {p.selfie_url ? (
-              <a href={p.selfie_url} target="_blank" rel="noreferrer">
-                <img
-                  src={p.selfie_url}
-                  alt={p.name}
-                  className="h-16 w-16 rounded-full border border-slate-200 object-cover hover:opacity-90"
-                />
-              </a>
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-300">
-                <i className="fas fa-user text-[20px]" />
-              </div>
-            )}
-            <p className="mt-2 w-full truncate text-[12.5px] font-bold text-slate-700">{p.name}</p>
-            <p className="text-[10.5px] text-slate-400">{p.role || '—'}</p>
-            {p.selfie_url ? (
-              <button
-                type="button"
-                onClick={() => clear(p)}
-                className="mt-1.5 text-[10.5px] font-bold text-danger hover:underline"
-              >
-                Clear (approve change)
-              </button>
-            ) : (
-              <span className="mt-1.5 text-[10.5px] font-semibold text-amber-500">Not enrolled</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function OfficeLocationCard({ office, onChanged }) {
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
