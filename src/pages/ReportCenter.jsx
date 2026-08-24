@@ -287,6 +287,8 @@ export default function ReportCenter() {
         </div>
       )}
 
+      {type === 'monitor' && <SupervisionPanel from={from} to={to} />}
+
       {loading || !data ? (
         <p className="py-16 text-center text-[13px] text-slate-400">{loading ? 'Calculating…' : ''}</p>
       ) : !hasQuery ? (
@@ -618,6 +620,91 @@ function DetailRow({ label, raw, note }) {
         <div className="h-full rounded-full bg-brand" style={{ width: `${(raw / 2) * 100}%` }} />
       </div>
       <p className="text-[11px] text-slate-400">{note}</p>
+    </div>
+  )
+}
+
+/* Supervisor daily reviews (Do / Don't) from the StudyNal app — the raw
+   submissions behind the Monitor component's daily reports. */
+function SupervisionPanel({ from, to }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (!from || !to || to < from) return
+      setLoading(true)
+      setError('')
+      try {
+        const d = await api.get(`/api/supervision/reports?from=${from}&to=${to}`)
+        if (alive) setRows(d.rows || [])
+      } catch (e) {
+        if (alive) {
+          setError(e.message || 'Could not load supervision reports')
+          setRows([])
+        }
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [from, to])
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-[14.5px] font-extrabold text-slate-800">Supervision Reviews</p>
+        <span className="text-[11px] text-slate-400">
+          {rows.length} mark{rows.length === 1 ? '' : 's'} in this period
+        </span>
+      </div>
+      <p className="mb-3 text-[11.5px] text-slate-400">
+        Daily Do / Don&apos;t task reviews submitted by supervisors in the StudyNal app.
+      </p>
+      {error ? (
+        <p className="py-6 text-center text-[12.5px] font-bold text-rose-500">{error}</p>
+      ) : loading ? (
+        <p className="py-6 text-center text-[13px] text-slate-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-slate-400">No supervisor reviews in this period yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-slate-100 text-[10.5px] tracking-wide text-slate-400 uppercase">
+                <th className="px-2 py-2 font-bold">Date</th>
+                <th className="px-2 py-2 font-bold">Employee</th>
+                <th className="px-2 py-2 font-bold">Role</th>
+                <th className="px-2 py-2 font-bold">Task</th>
+                <th className="px-2 py-2 font-bold">Mark</th>
+                <th className="px-2 py-2 font-bold">Supervisor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-slate-50">
+                  <td className="whitespace-nowrap px-2 py-2 text-slate-400">{r.report_date}</td>
+                  <td className="px-2 py-2 font-bold text-slate-700">{r.employee}</td>
+                  <td className="px-2 py-2 text-slate-400">{r.employee_role}</td>
+                  <td className="px-2 py-2 text-slate-600">{r.task}</td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={`inline-block rounded-lg px-2 py-0.5 text-[11px] font-extrabold ${
+                        r.done ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'
+                      }`}
+                    >
+                      {r.done ? 'Do' : "Don't"}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-slate-500">{r.supervisor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

@@ -20,6 +20,7 @@ export const navGroups = [
     title: 'People',
     items: [
       { to: '/staff', label: 'Teachers & Staff', short: 'People', icon: 'fa-users' },
+      { to: '/link', label: 'Link', short: 'Link', icon: 'fa-link' },
       { to: '/archive', label: 'Archive', short: 'Archive', icon: 'fa-box-archive' },
     ],
   },
