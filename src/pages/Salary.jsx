@@ -62,7 +62,7 @@ export default function Salary() {
       <div style={styles.statsContainer}>
         <div style={{ ...styles.statCard, borderLeft: '4px solid #10b981' }}>
           <div style={styles.statLabel}>Total Payroll</div>
-          <div style={{ ...styles.statValue, color: '#10b981' }}>${totalPayroll.toLocaleString()}</div>
+          <div style={{ ...styles.statValue, color: '#10b981' }}>{totalPayroll.toLocaleString()} IQD</div>
         </div>
         <div style={{ ...styles.statCard, borderLeft: '4px solid #3b82f6' }}>
           <div style={styles.statLabel}>Records</div>
@@ -85,9 +85,9 @@ export default function Salary() {
               {records.map((r) => (
                 <tr key={r.id}>
                   <td style={styles.nameCell}>{staffName(r)}</td>
-                  <td style={{ fontWeight: 600, color: '#059669' }}>${Number(r.tsalary || 0).toLocaleString()}</td>
-                  <td style={{ color: '#10b981' }}>+${Number(r.reward || 0).toLocaleString()}</td>
-                  <td style={{ color: '#ef4444' }}>-${Number(r.punish || 0).toLocaleString()}</td>
+                  <td style={{ fontWeight: 600, color: '#059669' }}>{Number(r.tsalary || 0).toLocaleString()} IQD</td>
+                  <td style={{ color: '#10b981' }}>+{Number(r.reward || 0).toLocaleString()} IQD</td>
+                  <td style={{ color: '#ef4444' }}>-{Number(r.punish || 0).toLocaleString()} IQD</td>
                   <td>{r.date ? new Date(r.date).toLocaleDateString() : '-'}</td>
                   <td><button onClick={() => { setEditing(r); setShowForm(true); }} style={styles.editBtn}>✏️ Edit</button></td>
                 </tr>

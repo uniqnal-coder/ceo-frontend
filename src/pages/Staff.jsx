@@ -273,7 +273,7 @@ export default function Staff() {
                   <td>{member.department || <EmptyCell />}</td>
                   <td style={member.salary != null && member.salary !== '' ? styles.salaryCell : undefined}>
                     {member.salary != null && member.salary !== ''
-                      ? `$${Number(member.salary).toLocaleString()}`
+                      ? `${Number(member.salary).toLocaleString()} IQD`
                       : <EmptyCell />}
                   </td>
                   <td>{member.phone || <EmptyCell />}</td>
@@ -640,7 +640,7 @@ function StaffForm({ staff, onClose }) {
               {errors.department && <span style={styles.errorText}>{errors.department}</span>}
             </div>
             <div style={styles.formGroup}>
-              <label>Salary</label>
+              <label>Salary (IQD)</label>
               <input
                 type="number"
                 value={formData.salary}

@@ -9,7 +9,7 @@ import {
 } from '../api/dashboard'
 import Skeleton from '../components/ui/Skeleton'
 
-const money = (n) => `$${Number(n || 0).toLocaleString()}`
+const money = (n) => `${Number(n || 0).toLocaleString()} IQD`
 const pctOf = (part, total) => (total ? Math.round((part / total) * 1000) / 10 : null)
 
 

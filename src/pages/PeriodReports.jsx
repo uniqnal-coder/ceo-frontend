@@ -13,7 +13,7 @@ const PERIODS = {
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
 function fmtMoney(n) {
-  return `$${Number(n || 0).toLocaleString()}`
+  return `${Number(n || 0).toLocaleString()} IQD`
 }
 
 function fmtTime(iso) {
