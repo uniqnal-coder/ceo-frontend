@@ -11,6 +11,7 @@ import Tasks from './pages/Tasks';
 import AutoTask from './pages/AutoTask';
 import Salary from './pages/Salary';
 import Announcements from './pages/Announcements';
+import Table from './pages/Table';
 import Attendance from './pages/Attendance';
 import PeriodReports from './pages/PeriodReports';
 import ReportCenter from './pages/ReportCenter';
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/today" element={<Navigate to="/attendance" replace />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/announcements" element={<Announcements />} />
+          <Route path="/table" element={<Table />} />
           <Route path="/daily-reports" element={<Navigate to="/reports" replace />} />
           <Route path="/reports" element={<ReportCenter />} />
           <Route path="/reports/classic" element={<PeriodReports />} />

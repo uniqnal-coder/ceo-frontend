@@ -46,6 +46,7 @@ export const navGroups = [
     title: 'Engagement',
     items: [
       { to: '/announcements', label: 'Announcements', short: 'Announce', icon: 'fa-bullhorn' },
+      { to: '/table', label: 'Table', short: 'Table', icon: 'fa-table-cells' },
     ],
   },
   {
