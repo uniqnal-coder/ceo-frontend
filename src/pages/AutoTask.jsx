@@ -195,7 +195,9 @@ export default function AutoTask() {
   const [noteMessage, setNoteMessage] = useState('');
   const [appType, setAppType] = useState('staff'); // teacher | staff
   const [categoryId, setCategoryId] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  // Several people can receive the same assignment or announcement.
+  const [pickedIds, setPickedIds] = useState(() => new Set());
+  const [peopleSearch, setPeopleSearch] = useState('');
   const [roleTasks, setRoleTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -342,7 +344,7 @@ export default function AutoTask() {
   useEffect(() => {
     let live = true;
     setCategoryId('');
-    setEmployeeId('');
+    setPickedIds(new Set());
     setSelected(new Set());
     (async () => {
       try {
@@ -423,11 +425,47 @@ export default function AutoTask() {
     return list;
   }, [people, appType, categoryId, categories]);
 
-  const selectedEmployee = employees.find((p) => p.id === employeeId) || null;
-  const selectedUsers = useMemo(
-    () => (employeeId ? new Set([employeeId]) : new Set()),
-    [employeeId]
+  const pickedList = useMemo(
+    () => employees.filter((p) => pickedIds.has(p.id)),
+    [employees, pickedIds]
   );
+  const selectedEmployee = pickedList.length === 1 ? pickedList[0] : null;
+  // Label for messages: one name, or "N employees".
+  const pickedLabel =
+    pickedList.length === 1
+      ? pickedList[0].name
+      : `${pickedList.length} employee${pickedList.length === 1 ? '' : 's'}`;
+  const selectedUsers = useMemo(() => new Set(pickedIds), [pickedIds]);
+
+  const visiblePeople = useMemo(() => {
+    const q = peopleSearch.trim().toLowerCase();
+    return q ? employees.filter((p) => p.name.toLowerCase().includes(q)) : employees;
+  }, [employees, peopleSearch]);
+
+  const togglePerson = (id) =>
+    setPickedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const selectAllPeople = () =>
+    setPickedIds((prev) => new Set([...prev, ...visiblePeople.map((p) => p.id)]));
+  const deselectAllPeople = () => setPickedIds(new Set());
+
+  // A task counts as "already sent" only when every picked person has it;
+  // partly-covered tasks stay selectable.
+  const haveAll = (title) => {
+    if (!pickedIds.size) return false;
+    const who = already.get(title);
+    if (!who) return false;
+    return [...pickedIds].every((id) => who.has(id));
+  };
+  const haveSome = (title) => {
+    const who = already.get(title);
+    if (!who) return 0;
+    return [...pickedIds].filter((id) => who.has(id)).length;
+  };
 
   useEffect(() => {
     if (selectedUsers.size === 0 || dates.length === 0) { setAlready(new Map()); return; }
@@ -482,11 +520,11 @@ export default function AutoTask() {
       : scheduledSlotCount;
   const canSave =
     kind === 'announcement'
-      ? !!employeeId && !!noteTitle.trim()
-      : !!employeeId && !!categoryId && taskCount > 0 && !!dueDate;
+      ? pickedIds.size > 0 && !!noteTitle.trim()
+      : pickedIds.size > 0 && !!categoryId && taskCount > 0 && !!dueDate;
 
   const resetForm = () => {
-    setEmployeeId('');
+    setPickedIds(new Set());
     setSelected(new Set(roleTasks.map((t) => t.title)));
     setPeriod('daily');
     setScheduleMode('once');
@@ -500,8 +538,8 @@ export default function AutoTask() {
       toast.error(`Select a ${roleLabel.toLowerCase()} first`);
       return;
     }
-    if (!employeeId) {
-      toast.error('Select an employee first');
+    if (!pickedIds.size) {
+      toast.error('Select at least one employee');
       return;
     }
     const titles = roleTasks.map((t) => t.title).filter((t) => selected.has(t));
@@ -516,12 +554,12 @@ export default function AutoTask() {
       setSaving(true);
       try {
         await api.post('/api/announcements/send', {
-          user_ids: [employeeId],
+          user_ids: [...pickedIds],
           titles: [noteTitle.trim()],
           message: noteMessage.trim(),
         });
         toast.success(
-          `Announcement sent to ${selectedEmployee?.name || 'the employee'} — it appears in the app's notifications.`
+          `Announcement sent to ${pickedLabel} — it appears in the app's notifications.`
         );
         setNoteTitle('');
         setNoteMessage('');
@@ -575,7 +613,7 @@ export default function AutoTask() {
         let skippedCompleted = 0;
         if (period === 'daily') {
           const r = await postBulk({
-            user_ids: [employeeId],
+            user_ids: [...pickedIds],
             titles,
             dates,
           });
@@ -586,7 +624,7 @@ export default function AutoTask() {
           // Fall back to one titles+dates call per day for older servers.
           try {
             const r = await postBulk({
-              user_ids: [employeeId],
+              user_ids: [...pickedIds],
               assignments,
             });
             items = (r.subtasks || 0) + (r.created || 0);
@@ -600,7 +638,7 @@ export default function AutoTask() {
             const results = await Promise.allSettled(
               assignments.map(({ date, titles: dayTitles }) =>
                 postBulk({
-                  user_ids: [employeeId],
+                  user_ids: [...pickedIds],
                   titles: dayTitles,
                   dates: [date],
                 })
@@ -632,7 +670,7 @@ export default function AutoTask() {
             role: appType,
             category_id: categoryId || null,
             period,
-            user_ids: [employeeId],
+            user_ids: [...pickedIds],
             titles: usingList ? [] : titles,
             repeat: 'daily',
             weekdays: [],
@@ -660,7 +698,7 @@ export default function AutoTask() {
           role: appType,
           category_id: categoryId || null,
           period,
-          user_ids: [employeeId],
+          user_ids: [...pickedIds],
           titles: useBuckets ? allDayTitles : (usingList ? [] : titles),
           repeat: useBuckets ? 'custom' : (repeatDays.size ? 'custom' : 'daily'),
           weekdays: useBuckets ? [...new Set(weekdays)] : [...repeatDays].sort(),
@@ -860,7 +898,7 @@ export default function AutoTask() {
                     <i className="fas fa-briefcase absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-violet-500" />
                     <select
                       value={categoryId}
-                      onChange={(e) => { setCategoryId(e.target.value); setEmployeeId(''); }}
+                      onChange={(e) => { setCategoryId(e.target.value); setPickedIds(new Set()); }}
                       className={selectCls}
                     >
                       <option value="">Select {roleLabel.toLowerCase()}…</option>
@@ -884,32 +922,87 @@ export default function AutoTask() {
                 <div>
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">3</span>
-                    <span className="text-[13px] font-bold text-slate-700">Employee</span>
+                    <span className="text-[13px] font-bold text-slate-700">Employees</span>
+                    <span className="rounded-full bg-[#1e3a5f] px-2 py-0.5 text-[10.5px] font-extrabold text-white">
+                      {pickedIds.size} selected
+                    </span>
                   </div>
-                  <div className="relative">
-                    <i className="fas fa-user absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px] text-emerald-500" />
-                    <select
-                      value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      disabled={!categoryId}
-                      className={`${selectCls} disabled:bg-slate-50 disabled:text-slate-400`}
-                    >
-                      <option value="">
-                        {!categoryId ? `Select a ${roleLabel.toLowerCase()} first…` : 'Select employee…'}
-                      </option>
-                      {employees.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                    <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[10px] text-slate-400" />
-                  </div>
-                  {categoryId && !employees.length && (
-                    <p className="mt-1.5 text-[11.5px] text-amber-600">
-                      No one linked to this {roleLabel.toLowerCase()} — set it in Teachers &amp; Staff.
-                    </p>
-                  )}
+                  <p className="text-[11.5px] text-slate-400">
+                    {!categoryId
+                      ? `Select a ${roleLabel.toLowerCase()} first…`
+                      : `Tick everyone who should receive this.`}
+                  </p>
                 </div>
               </div>
+
+              {/* People picker — several can receive the same assignment */}
+              {categoryId && (
+                <div className="mt-4">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllPeople}
+                      disabled={!visiblePeople.length}
+                      className="rounded-lg bg-[#1e3a5f] px-2.5 py-1 text-[11px] font-bold text-white transition hover:opacity-90 disabled:opacity-40"
+                    >
+                      Select all{peopleSearch.trim() ? ' shown' : ''} ({visiblePeople.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deselectAllPeople}
+                      disabled={!pickedIds.size}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Deselect all
+                    </button>
+                    {employees.length > 8 && (
+                      <input
+                        type="text"
+                        value={peopleSearch}
+                        onChange={(e) => setPeopleSearch(e.target.value)}
+                        placeholder="Search employees…"
+                        className="ml-auto w-48 rounded-lg border border-slate-200 px-2.5 py-1 text-[12px] outline-none focus:border-[#2563eb]"
+                      />
+                    )}
+                  </div>
+
+                  {!employees.length ? (
+                    <p className="rounded-xl bg-amber-50 px-4 py-3 text-center text-[12px] text-amber-700">
+                      No one linked to this {roleLabel.toLowerCase()} — set it in Teachers &amp; Staff.
+                    </p>
+                  ) : !visiblePeople.length ? (
+                    <p className="rounded-xl bg-slate-50 px-4 py-3 text-center text-[12.5px] text-slate-400">
+                      No employee matches “{peopleSearch}”.
+                    </p>
+                  ) : (
+                    <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {visiblePeople.map((p) => {
+                          const on = pickedIds.has(p.id);
+                          return (
+                            <label
+                              key={p.id}
+                              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold transition ${
+                                on
+                                  ? 'border-[#2563eb] bg-[#eff6ff] text-[#1e40af]'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:bg-white'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={() => togglePerson(p.id)}
+                                className="h-3.5 w-3.5 accent-[#2563eb]"
+                              />
+                              {p.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {kind === 'announcement' ? (
@@ -975,7 +1068,7 @@ export default function AutoTask() {
                 <p className="mt-3 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
                   Goes to{' '}
                   <span className="font-extrabold text-slate-700">
-                    {selectedEmployee?.name || 'nobody yet — pick an employee above'}
+                    {pickedIds.size ? pickedLabel : 'nobody yet — pick people above'}
                   </span>
                 </p>
               </div>
@@ -996,8 +1089,8 @@ export default function AutoTask() {
                 {period !== 'daily' && (
                   <p className="mb-3 text-[12px] text-slate-500">
                     Tap tasks under each day on the right to schedule them.
-                    {selectedEmployee?.name ? (
-                      <> · For <span className="font-bold text-slate-700">{selectedEmployee.name}</span></>
+                    {pickedIds.size ? (
+                      <> · For <span className="font-bold text-slate-700">{pickedLabel}</span></>
                     ) : null}
                   </p>
                 )}
@@ -1017,9 +1110,7 @@ export default function AutoTask() {
                     {/* Master toggle — only counts tasks that can still be
                         sent, so "already sent" ones never block it. */}
                     {(() => {
-                      const selectable = roleTasks.filter(
-                        (t) => !already.get(t.title)?.has(employeeId)
-                      );
+                      const selectable = roleTasks.filter((t) => !haveAll(t.title));
                       const allOn =
                         selectable.length > 0 &&
                         selectable.every((t) => selected.has(t.title));
@@ -1056,7 +1147,8 @@ export default function AutoTask() {
                     })()}
                     {roleTasks.map((t) => {
                       const on = selected.has(t.title);
-                      const have = already.get(t.title)?.has(employeeId);
+                      const have = haveAll(t.title);
+                      const partial = !have ? haveSome(t.title) : 0;
                       return (
                         <label
                           key={t.id}
@@ -1214,20 +1306,23 @@ export default function AutoTask() {
                     <button
                       type="button"
                       disabled={
-                        permSaving || !employeeId || !permFrom ||
+                        permSaving || !pickedIds.size || !permFrom ||
                         (!!permTo && permTo < permFrom)
                       }
                       onClick={async () => {
                         setPermSaving(true);
                         try {
-                          await api.post('/api/leave/permission', {
-                            user_id: employeeId,
-                            start_date: permFrom,
-                            end_date: permTo || permFrom,
-                            note: 'Permission',
-                          });
+                          // One permission window per picked person.
+                          for (const uid of pickedIds) {
+                            await api.post('/api/leave/permission', {
+                              user_id: uid,
+                              start_date: permFrom,
+                              end_date: permTo || permFrom,
+                              note: 'Permission',
+                            });
+                          }
                           toast.success(
-                            `Permission saved for ${selectedEmployee?.name || 'employee'} — ${permFrom}${permTo && permTo !== permFrom ? ` → ${permTo}` : ''}`
+                            `Permission saved for ${pickedLabel} — ${permFrom}${permTo && permTo !== permFrom ? ` → ${permTo}` : ''}`
                           );
                           setPermFrom('');
                           setPermTo('');
@@ -1242,9 +1337,9 @@ export default function AutoTask() {
                       {permSaving ? 'Saving…' : 'Save'}
                     </button>
                   </div>
-                  {!employeeId && (
+                  {!pickedIds.size && (
                     <p className="mt-2 text-[11px] font-semibold text-amber-600">
-                      Select an employee first to set a permission date.
+                      Select at least one employee to set a permission date.
                     </p>
                   )}
                 </div>
