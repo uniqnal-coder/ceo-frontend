@@ -869,7 +869,7 @@ export default function AutoTask() {
                   </span>
                 </label>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">1</span>
@@ -919,26 +919,15 @@ export default function AutoTask() {
                   )}
                 </div>
 
-                <div>
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#2563eb] text-[11px] font-extrabold text-white">3</span>
-                    <span className="text-[13px] font-bold text-slate-700">Employees</span>
-                    <span className="rounded-full bg-[#1e3a5f] px-2 py-0.5 text-[10.5px] font-extrabold text-white">
-                      {pickedIds.size} selected
-                    </span>
-                  </div>
-                  <p className="text-[11.5px] text-slate-400">
-                    {!categoryId
-                      ? `Select a ${roleLabel.toLowerCase()} first…`
-                      : `Tick everyone who should receive this.`}
-                  </p>
-                </div>
               </div>
 
               {/* People picker — several can receive the same assignment */}
               {categoryId && (
                 <div className="mt-4">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-[#1e3a5f] px-2.5 py-1 text-[10.5px] font-extrabold text-white">
+                      {pickedIds.size} selected
+                    </span>
                     <button
                       type="button"
                       onClick={selectAllPeople}
