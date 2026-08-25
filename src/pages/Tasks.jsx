@@ -11,6 +11,9 @@ const ROLES = [
 // Role-based task templates: pick a role + subject/job role, edit its
 // standard task list, save with PUT /api/role-tasks/:role.
 export default function Tasks() {
+  // Two kinds of item share this editor: work tasks and announcements
+  // (announcements are delivered to the app's notification section).
+  const [kind, setKind] = useState('task'); // task | announcement
   const [role, setRole] = useState('teacher');
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState(''); // '' = whole role
@@ -21,10 +24,18 @@ export default function Tasks() {
   const [error, setError] = useState('');
   const lastAdded = useRef(null);
 
-  const load = async (r, cat) => {
+  const load = async (r, cat, k = kind) => {
     setLoading(true);
     setError('');
     try {
+      if (k === 'announcement') {
+        const rows = toArray(
+          await api.get(`/api/announcements/templates?role=${r}${cat ? `&category_id=${cat}` : ''}`)
+        );
+        setTasks(rows.length ? rows.map(String) : ['']);
+        setDirty(false);
+        return;
+      }
       const scope = cat ? `&category_id=${cat}` : '&category_id=none';
       const rows = toArray(await api.get(`/api/role-tasks?role=${r}${scope}`));
       setTasks(rows.length ? rows.map((t) => t.title) : ['']);
@@ -47,8 +58,8 @@ export default function Tasks() {
   }, [role]);
 
   useEffect(() => {
-    load(role, categoryId);
-  }, [role, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+    load(role, categoryId, kind);
+  }, [role, categoryId, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (i, value) => {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? value : t)));
@@ -70,6 +81,19 @@ export default function Tasks() {
     const titles = tasks.map((t) => t.trim()).filter(Boolean);
     setSaving(true);
     try {
+      if (kind === 'announcement') {
+        const saved = toArray(
+          await api.put('/api/announcements/templates', {
+            role,
+            category_id: categoryId || null,
+            items: titles,
+          })
+        );
+        setTasks(saved.length ? saved.map(String) : ['']);
+        setDirty(false);
+        toast.success(`Saved ${saved.length} announcement${saved.length === 1 ? '' : 's'}`);
+        return;
+      }
       const saved = toArray(await api.put(`/api/role-tasks/${role}`, { tasks: titles, category_id: categoryId || null }));
       setTasks(saved.length ? saved.map((t) => t.title) : ['']);
       setDirty(false);
@@ -92,14 +116,38 @@ export default function Tasks() {
       <div className="mb-5">
         <h1 className="text-[22px] font-extrabold text-slate-800">📋 Task Management</h1>
         <p className="text-[13px] text-slate-500">
-          Pick Teacher or Staff, choose a {scopeNoun}, then edit that group&apos;s standard tasks.
+          {kind === 'announcement'
+            ? `Write the announcements a ${scopeNoun} group can be sent — they appear in the app's notifications.`
+            : `Pick Teacher or Staff, choose a ${scopeNoun}, then edit that group's standard tasks.`}
         </p>
       </div>
 
-      {/* Step 1 — role */}
+      {/* Step 1 — what kind of item */}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Step 1 · Select a role
+          Step 1 · What are you adding
+        </p>
+        <div className="flex items-center gap-3">
+          <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+            kind === 'announcement' ? 'bg-amber-50' : 'bg-[#eff6ff]'
+          }`}>
+            <i className={`fas ${kind === 'announcement' ? 'fa-bullhorn text-amber-500' : 'fa-clipboard-check text-[#2563eb]'}`} />
+          </span>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-[14px] font-semibold text-slate-700 outline-none focus:border-brand"
+          >
+            <option value="task">Task — work to be done and tracked</option>
+            <option value="announcement">Announcement — shown in the app&apos;s notifications</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Step 2 — role */}
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Step 2 · Select a role
         </p>
         <div className="flex items-center gap-3">
           <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${activeRole.soft}`}>
@@ -121,7 +169,7 @@ export default function Tasks() {
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Step 2 · {role === 'teacher' ? 'Select the subject' : 'Select the staff role'}
+            Step 3 · {role === 'teacher' ? 'Select the subject' : 'Select the staff role'}
           </p>
           <Link
             to={managePath}
@@ -159,16 +207,16 @@ export default function Tasks() {
         </p>
       </div>
 
-      {/* Step 3 — tasks */}
+      {/* Step 4 — the list itself */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Step 3 · Tasks for {categoryId
+            Step 4 · {kind === 'announcement' ? 'Announcements' : 'Tasks'} for {categoryId
               ? categories.find((c) => c.id === categoryId)?.name || activeRole.plural
               : `all ${activeRole.plural}`}
           </p>
           <span className="text-[11px] font-semibold text-slate-400">
-            {filled} task{filled === 1 ? '' : 's'}
+            {filled} {kind === 'announcement' ? 'announcement' : 'task'}{filled === 1 ? '' : 's'}
           </span>
         </div>
 
@@ -188,7 +236,11 @@ export default function Tasks() {
                   value={t}
                   onChange={(e) => update(i, e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addField()}
-                  placeholder={`Task ${i + 1} — e.g. ${role === 'teacher' ? 'Prepare lesson materials' : 'Check entry points'}`}
+                  placeholder={
+                    kind === 'announcement'
+                      ? `Announcement ${i + 1} — e.g. Staff meeting at 2 PM`
+                      : `Task ${i + 1} — e.g. ${role === 'teacher' ? 'Prepare lesson materials' : 'Check entry points'}`
+                  }
                   className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 text-[13.5px] text-slate-700 outline-none focus:border-brand"
                 />
                 <button

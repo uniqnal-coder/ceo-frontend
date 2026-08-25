@@ -6,7 +6,6 @@ export const navGroups = [
     title: 'Overview',
     items: [
       { to: '/', label: 'Dashboard', icon: 'fa-gauge-high', end: true },
-      { to: '/attendance', label: 'Attendance', short: 'Attendance', icon: 'fa-user-check' },
     ],
   },
   {
@@ -46,7 +45,6 @@ export const navGroups = [
   {
     title: 'Engagement',
     items: [
-      { to: '/announcements', label: 'Announcements', short: 'Announce', icon: 'fa-bullhorn' },
       { to: '/table', label: 'Table', short: 'Table', icon: 'fa-table-cells' },
     ],
   },

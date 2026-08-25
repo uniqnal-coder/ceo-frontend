@@ -189,6 +189,8 @@ const selectCls =
 export default function AutoTask() {
   const [people, setPeople] = useState([]);
   const [categories, setCategories] = useState([]);
+  // Assigning work, or sending an announcement to the app's notifications.
+  const [kind, setKind] = useState('task'); // task | announcement
   const [appType, setAppType] = useState('staff'); // teacher | staff
   const [categoryId, setCategoryId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -365,6 +367,19 @@ export default function AutoTask() {
     setTasksLoading(true);
     (async () => {
       try {
+        if (kind === 'announcement') {
+          const scopedA = toArray(
+            await api.get(`/api/announcements/templates?role=${appType}&category_id=${categoryId}`)
+          );
+          const wideA = toArray(await api.get(`/api/announcements/templates?role=${appType}`));
+          const titles = [...new Set([...scopedA, ...wideA].map(String).filter(Boolean))];
+          const items = titles.map((t) => ({ id: `a:${t}`, title: t }));
+          if (live) {
+            setRoleTasks(items);
+            setSelected(new Set());
+          }
+          return;
+        }
         const scoped = toArray(await api.get(`/api/role-tasks?role=${appType}&category_id=${categoryId}`));
         const roleWide = toArray(await api.get(`/api/role-tasks?role=${appType}&category_id=none`));
         const seen = new Set();
@@ -385,7 +400,7 @@ export default function AutoTask() {
       }
     })();
     return () => { live = false; };
-  }, [appType, categoryId]);
+  }, [kind, appType, categoryId]);
 
   const roleLabel = appType === 'teacher' ? 'Subject' : 'Staff role';
   const activeCategory = categories.find((c) => c.id === categoryId) || null;
@@ -463,7 +478,10 @@ export default function AutoTask() {
     period === 'daily'
       ? (usingList ? roleTasks.length : selected.size)
       : scheduledSlotCount;
-  const canSave = !!employeeId && !!categoryId && taskCount > 0 && !!dueDate;
+  const canSave =
+    kind === 'announcement'
+      ? !!employeeId && selected.size > 0
+      : !!employeeId && !!categoryId && taskCount > 0 && !!dueDate;
 
   const resetForm = () => {
     setEmployeeId('');
@@ -485,6 +503,32 @@ export default function AutoTask() {
       return;
     }
     const titles = roleTasks.map((t) => t.title).filter((t) => selected.has(t));
+
+    // Announcements are delivered straight to the app's notification
+    // section — no scheduling, no task rows.
+    if (kind === 'announcement') {
+      if (!titles.length) {
+        toast.error('Select at least one announcement');
+        return;
+      }
+      setSaving(true);
+      try {
+        const r = await api.post('/api/announcements/send', {
+          user_ids: [employeeId],
+          titles,
+        });
+        toast.success(
+          `Sent ${r.announcements} announcement${r.announcements === 1 ? '' : 's'} to ${selectedEmployee?.name || 'the employee'}`
+        );
+        setSelected(new Set());
+      } catch (e) {
+        toast.error(e.message || 'Could not send');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const assignments = Object.entries(dayPlan)
       .filter(([, list]) => list?.length)
       .map(([date, list]) => ({ date, titles: list }))
@@ -761,7 +805,28 @@ export default function AutoTask() {
           <div className="space-y-5">
             {/* Who — always full width so selectors never disappear */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-4 text-[16px] font-extrabold text-slate-800">Assign to</h2>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <h2 className="text-[16px] font-extrabold text-slate-800">
+                  {kind === 'announcement' ? 'Send announcement to' : 'Assign to'}
+                </h2>
+                <label className="block min-w-[260px]">
+                  <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
+                    What are you sending
+                  </span>
+                  <span className="relative block">
+                    <i className={`fas ${kind === 'announcement' ? 'fa-bullhorn text-amber-500' : 'fa-clipboard-check text-[#2563eb]'} pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[13px]`} />
+                    <select
+                      value={kind}
+                      onChange={(e) => { setKind(e.target.value); setSelected(new Set()); }}
+                      className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-8 text-[13px] font-bold text-slate-700 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/15"
+                    >
+                      <option value="task">Task</option>
+                      <option value="announcement">Announcement</option>
+                    </select>
+                    <i className="fas fa-chevron-down pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-slate-400" />
+                  </span>
+                </label>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <div className="mb-1.5 flex items-center gap-2">
@@ -1201,7 +1266,9 @@ export default function AutoTask() {
                 className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a5f] px-5 py-2.5 text-[13px] font-extrabold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
                 <i className="fas fa-paper-plane text-[12px]" />
-                {saving ? 'Assigning…' : 'Assign Task'}
+                {saving
+                  ? (kind === 'announcement' ? 'Sending…' : 'Assigning…')
+                  : (kind === 'announcement' ? 'Send Announcement' : 'Assign Task')}
               </button>
             </div>
           </div>
