@@ -780,7 +780,6 @@ function ManagerFeedbackPanel({ from, to }) {
                 <th className="px-2 py-2 font-bold">Staff name</th>
                 <th className="px-2 py-2 font-bold">Role</th>
                 <th className="px-2 py-2 font-bold">Evaluate</th>
-                <th className="px-2 py-2 font-bold">Note</th>
                 <th className="px-2 py-2 font-bold">Manager</th>
                 <th className="px-2 py-2 text-right font-bold">Details</th>
               </tr>
@@ -804,7 +803,6 @@ function ManagerFeedbackPanel({ from, to }) {
                       {r.evaluation}
                     </span>
                   </td>
-                  <td className="max-w-[280px] truncate px-2 py-2 text-slate-500" title={r.note}>{r.note}</td>
                   <td className="px-2 py-2 text-slate-500">{r.manager}</td>
                   <td className="px-2 py-2 text-right">
                     <button
@@ -869,15 +867,6 @@ function FeedbackDetailDialog({ row, onClose }) {
             by <span className="font-bold text-slate-600">{row.manager}</span>
           </span>
         </div>
-
-        {row.note && (
-          <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
-            <p className="mb-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-              Manager&apos;s note
-            </p>
-            <p className="text-[12.5px] leading-relaxed text-slate-600">{row.note}</p>
-          </div>
-        )}
 
         <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
           Collab report
