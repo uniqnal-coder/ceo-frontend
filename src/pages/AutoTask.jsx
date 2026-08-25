@@ -191,8 +191,6 @@ export default function AutoTask() {
   const [categories, setCategories] = useState([]);
   // Assigning work, or sending an announcement to the app's notifications.
   const [kind, setKind] = useState('task'); // task | announcement
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteMessage, setNoteMessage] = useState('');
   const [appType, setAppType] = useState('staff'); // teacher | staff
   const [categoryId, setCategoryId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -482,7 +480,7 @@ export default function AutoTask() {
       : scheduledSlotCount;
   const canSave =
     kind === 'announcement'
-      ? !!employeeId && !!noteTitle.trim()
+      ? !!employeeId && selected.size > 0
       : !!employeeId && !!categoryId && taskCount > 0 && !!dueDate;
 
   const resetForm = () => {
@@ -509,22 +507,20 @@ export default function AutoTask() {
     // Announcements are delivered straight to the app's notification
     // section — no scheduling, no task rows.
     if (kind === 'announcement') {
-      if (!noteTitle.trim()) {
-        toast.error('Write a title for the announcement');
+      if (!titles.length) {
+        toast.error('Select at least one announcement');
         return;
       }
       setSaving(true);
       try {
-        await api.post('/api/announcements/send', {
+        const r = await api.post('/api/announcements/send', {
           user_ids: [employeeId],
-          titles: [noteTitle.trim()],
-          message: noteMessage.trim(),
+          titles,
         });
         toast.success(
-          `Announcement sent to ${selectedEmployee?.name || 'the employee'} — it appears in the app's notifications.`
+          `Sent ${r.announcements} announcement${r.announcements === 1 ? '' : 's'} to ${selectedEmployee?.name || 'the employee'}`
         );
-        setNoteTitle('');
-        setNoteMessage('');
+        setSelected(new Set());
       } catch (e) {
         toast.error(e.message || 'Could not send');
       } finally {
@@ -912,74 +908,6 @@ export default function AutoTask() {
               </div>
             </div>
 
-            {kind === 'announcement' ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-1 flex items-center gap-2">
-                  <i className="fas fa-bullhorn text-amber-500" />
-                  <h3 className="text-[15px] font-extrabold text-slate-800">Compose announcement</h3>
-                </div>
-                <p className="mb-4 text-[12px] text-slate-400">
-                  Shown in the StudyNal app&apos;s notifications for the person you picked above.
-                </p>
-
-                {roleTasks.length > 0 && (
-                  <div className="mb-4">
-                    <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
-                      Saved announcements — tap to use
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {roleTasks.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setNoteTitle(t.title)}
-                          className={`rounded-lg border px-3 py-1.5 text-[12px] font-bold transition ${
-                            noteTitle === t.title
-                              ? 'border-amber-400 bg-amber-50 text-amber-700'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {t.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <label className="mb-3 block">
-                  <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Title</span>
-                  <input
-                    value={noteTitle}
-                    maxLength={120}
-                    onChange={(e) => setNoteTitle(e.target.value)}
-                    placeholder="e.g. Staff meeting at 2 PM"
-                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-[13.5px] outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
-                    Message <span className="font-semibold normal-case text-slate-300">(optional)</span>
-                  </span>
-                  <textarea
-                    value={noteMessage}
-                    maxLength={1000}
-                    rows={5}
-                    onChange={(e) => setNoteMessage(e.target.value)}
-                    placeholder="Write the announcement…"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[13.5px] outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15"
-                  />
-                  <span className="mt-1 block text-right text-[11px] text-slate-400">{noteMessage.length}/1000</span>
-                </label>
-
-                <p className="mt-3 border-t border-slate-100 pt-3 text-[12px] text-slate-500">
-                  Goes to{' '}
-                  <span className="font-extrabold text-slate-700">
-                    {selectedEmployee?.name || 'nobody yet — pick an employee above'}
-                  </span>
-                </p>
-              </div>
-            ) : (
             <div className="grid gap-5 lg:grid-cols-2">
               {/* Daily task checklist (weekly/monthly schedule below handles picking) */}
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1315,18 +1243,13 @@ export default function AutoTask() {
                 )}
               </div>
             </div>
-            )}
           </div>
 
           {/* Bottom action bar */}
           <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2.5 rounded-xl bg-[#eff6ff] px-3.5 py-2.5 text-[12.5px] text-[#1e40af]">
               <i className="fas fa-circle-info mt-0.5" />
-              <span>
-                {kind === 'announcement'
-                  ? "The announcement appears instantly in the person's app notifications."
-                  : 'Make sure all details are correct before assigning the task.'}
-              </span>
+              <span>Make sure all details are correct before assigning the task.</span>
             </div>
             <div className="flex shrink-0 gap-2">
               <button
@@ -1350,8 +1273,8 @@ export default function AutoTask() {
             </div>
           </div>
 
-          {/* History — tasks only; announcements are one-off sends */}
-          <div className={`mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${kind === 'announcement' ? 'hidden' : ''}`}>
+          {/* History */}
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Assignment history
             </p>
