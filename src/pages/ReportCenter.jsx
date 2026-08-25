@@ -716,6 +716,8 @@ function SupervisionPanel({ from, to }) {
 const EVAL_CHIP = {
   reward: 'bg-emerald-50 text-emerald-600',
   normal: 'bg-slate-100 text-slate-500',
+  // Risk flags someone for attention without penalising them.
+  risk: 'bg-amber-50 text-amber-600',
   punish: 'bg-rose-50 text-rose-500',
 }
 
@@ -747,7 +749,7 @@ function ManagerFeedbackPanel({ from, to }) {
   }, [from, to])
 
   const rows = data?.rows || []
-  const summary = data?.summary || { reward: 0, normal: 0, punish: 0 }
+  const summary = data?.summary || { reward: 0, normal: 0, punish: 0, risk: 0 }
 
   return (
     <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -756,6 +758,7 @@ function ManagerFeedbackPanel({ from, to }) {
         <span className="flex gap-1.5 text-[11px] font-extrabold">
           <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-emerald-600">{summary.reward} reward</span>
           <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-slate-500">{summary.normal} normal</span>
+          <span className="rounded-lg bg-amber-50 px-2 py-0.5 text-amber-600">{summary.risk || 0} risk</span>
           <span className="rounded-lg bg-rose-50 px-2 py-0.5 text-rose-500">{summary.punish} punish</span>
         </span>
       </div>
