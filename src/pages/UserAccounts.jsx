@@ -90,11 +90,28 @@ export default function UserAccounts() {
   }, [users]);
 
   const hasQuery = !!(q.trim() || roleFilter || statusFilter);
+  // Every job title in use (Supervisor, Manager, Accounter, …) with a count,
+  // so the picker can drill into "which staff" — not just the access level.
+  const jobTitles = useMemo(() => {
+    const counts = new Map();
+    for (const u of users || []) {
+      const t = (u.job_title || '').trim();
+      if (t) counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([title, count]) => ({ title, count }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [users]);
+
   const shown = useMemo(() => {
     if (!hasQuery) return [];
     const needle = q.trim().toLowerCase();
     return (users || []).filter((u) => {
-      if (roleFilter && roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (roleFilter && roleFilter !== 'all') {
+        if (roleFilter.startsWith('job:')) {
+          if ((u.job_title || '') !== roleFilter.slice(4)) return false;
+        } else if (u.role !== roleFilter) return false;
+      }
       if (statusFilter === 'active' && (u.blocked || u.is_archived)) return false;
       if (statusFilter === 'blocked' && !u.blocked) return false;
       if (needle) {
@@ -200,13 +217,22 @@ export default function UserAccounts() {
             onChange={(e) => setRoleFilter(e.target.value)}
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-[#2563eb]"
           >
-            <option value="">Choose access level…</option>
+            <option value="">Choose a role…</option>
             <option value="all">Everyone · {stats.total}</option>
-            {Object.entries(ROLE_META).map(([k, m]) => (
-              <option key={k} value={k}>
-                {m.label} · {(users || []).filter((u) => u.role === k).length}
-              </option>
-            ))}
+            <optgroup label="Access level">
+              {Object.entries(ROLE_META).map(([k, m]) => (
+                <option key={k} value={k}>
+                  {m.label} · {(users || []).filter((u) => u.role === k).length}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Staff role">
+              {jobTitles.map(({ title, count }) => (
+                <option key={title} value={`job:${title}`}>
+                  {title} · {count}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
         <label className="block min-w-[140px]">
