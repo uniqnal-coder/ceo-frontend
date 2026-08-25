@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, toArray } from '../api/client'
 import { toast } from '../utils/toast'
 
-// Link — assign employees to a Supervisor. Supervisors review their team's
-// tasks daily in the StudyNal app; those reviews land in Reports → Monitor.
+// Link — assign employees to a Supervisor or a Manager. Supervisors review
+// their team's tasks daily (Reports → Monitor); managers read their people's
+// Collab reports and evaluate them (Reports → Feedback).
 export default function Link() {
   const [options, setOptions] = useState({ supervisors: [], employees: [] })
   const [links, setLinks] = useState([])
@@ -54,7 +55,7 @@ export default function Link() {
   }
 
   const connect = async () => {
-    if (!supervisor) return toast.error('Pick a supervisor first')
+    if (!supervisor) return toast.error('Pick a supervisor or manager first')
     setSaving(true)
     try {
       await api.put(`/api/supervision/links/${supervisor}`, { employee_ids: [...checked] })
@@ -68,8 +69,8 @@ export default function Link() {
   }
 
   const clear = async () => {
-    if (!supervisor) return toast.error('Pick a supervisor first')
-    if (!window.confirm('Remove every employee from this supervisor?')) return
+    if (!supervisor) return toast.error('Pick a supervisor or manager first')
+    if (!window.confirm('Remove every employee from this link?')) return
     setSaving(true)
     try {
       await api.del(`/api/supervision/links/${supervisor}`)
@@ -91,7 +92,8 @@ export default function Link() {
         <div>
           <h2 className="text-[20px] font-extrabold text-slate-800">🔗 Link</h2>
           <p className="text-[13px] text-slate-500">
-            Assign employees to a Supervisor — they review the team&apos;s tasks daily in StudyNal.
+            Assign employees to a Supervisor or Manager — supervisors review the team&apos;s tasks,
+            managers read their reports and evaluate them.
           </p>
         </div>
         <div className="flex gap-2">
@@ -120,16 +122,18 @@ export default function Link() {
         <div className="lg:col-span-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <label className="mb-4 block">
             <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Supervisor
+              Supervisor / Manager
             </span>
             <select
               value={supervisor}
               onChange={(e) => pick(e.target.value)}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13.5px] font-bold text-slate-700 outline-none focus:border-brand"
             >
-              <option value="">Choose a supervisor…</option>
+              <option value="">Choose a supervisor or manager…</option>
               {options.supervisors.map((s) => (
-                <option key={s.user_id} value={s.user_id}>{s.name}</option>
+                <option key={s.user_id} value={s.user_id}>
+                  {s.name}{s.role ? ` — ${s.role}` : ''}
+                </option>
               ))}
             </select>
           </label>
@@ -184,7 +188,7 @@ export default function Link() {
           <p className="mb-3 text-[14px] font-extrabold text-slate-700">Current links</p>
           {links.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-slate-400">
-              No supervisors linked yet.
+              Nobody linked yet.
             </p>
           ) : (
             <div className="space-y-3">
@@ -220,7 +224,7 @@ export default function Link() {
             </div>
           )}
           <p className="mt-4 text-[11px] text-slate-400">
-            Tap a link to edit it — the checklist loads that supervisor&apos;s team.
+            Tap a link to edit it — the checklist loads that person&apos;s team.
           </p>
         </div>
       </div>
