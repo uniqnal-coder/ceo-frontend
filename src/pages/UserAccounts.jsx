@@ -11,7 +11,6 @@ const ROLE_META = {
   admin: { label: 'Admin', badge: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
   teacher: { label: 'Teacher', badge: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
   staff: { label: 'Staff', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  student: { label: 'Student', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
 };
 
 const AVATAR_BG = ['bg-violet-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500', 'bg-teal-500'];
@@ -99,7 +98,7 @@ export default function UserAccounts() {
       if (statusFilter === 'active' && (u.blocked || u.is_archived)) return false;
       if (statusFilter === 'blocked' && !u.blocked) return false;
       if (needle) {
-        const hay = `${u.name || ''} ${u.email || ''} ${u.phone || ''} ${u.id || ''}`.toLowerCase();
+        const hay = `${u.name || ''} ${u.email || ''} ${u.phone || ''} ${u.job_title || ''} ${u.id || ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -201,7 +200,7 @@ export default function UserAccounts() {
             onChange={(e) => setRoleFilter(e.target.value)}
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-700 outline-none focus:border-[#2563eb]"
           >
-            <option value="">Choose role…</option>
+            <option value="">Choose access level…</option>
             <option value="all">Everyone · {stats.total}</option>
             {Object.entries(ROLE_META).map(([k, m]) => (
               <option key={k} value={k}>
@@ -298,7 +297,12 @@ export default function UserAccounts() {
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase ${meta.badge}`}>{meta.label}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase ${meta.badge}`}>
+                          {u.job_title || meta.label}
+                        </span>
+                        {u.job_title && (
+                          <span className="mt-1 block text-[10.5px] text-slate-400">{meta.label} access</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
                         {u.blocked ? (
