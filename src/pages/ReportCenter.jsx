@@ -29,7 +29,7 @@ const TYPES = [
   { key: 'attendance', label: 'Attendance', hint: 'Check in/out, selfie, GPS' },
   { key: 'monitor', label: 'Monitor', hint: 'Daily reporter' },
   { key: 'tasks', label: 'Tasks Report', hint: 'Task tracking' },
-  { key: 'feedback', label: 'Feedback', hint: 'Entered notes' },
+  { key: 'feedback', label: 'Feedback', hint: 'Manager evaluations & entered notes' },
 ]
 
 const fmtMoney = (n) => `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} IQD`
@@ -288,6 +288,7 @@ export default function ReportCenter() {
       )}
 
       {type === 'monitor' && <SupervisionPanel from={from} to={to} />}
+      {type === 'feedback' && <ManagerFeedbackPanel from={from} to={to} />}
 
       {loading || !data ? (
         <p className="py-16 text-center text-[13px] text-slate-400">{loading ? 'Calculating…' : ''}</p>
@@ -699,6 +700,102 @@ function SupervisionPanel({ from, to }) {
                     </span>
                   </td>
                   <td className="px-2 py-2 text-slate-500">{r.supervisor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* Manager evaluations (Reward / Normal / Punish) submitted from the StudyNal
+   app after reading Collab staff reports. */
+const EVAL_CHIP = {
+  reward: 'bg-emerald-50 text-emerald-600',
+  normal: 'bg-slate-100 text-slate-500',
+  punish: 'bg-rose-50 text-rose-500',
+}
+
+function ManagerFeedbackPanel({ from, to }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (!from || !to || to < from) return
+      setLoading(true)
+      setError('')
+      try {
+        const d = await api.get(`/api/manager/feedback?from=${from}&to=${to}`)
+        if (alive) setData(d)
+      } catch (e) {
+        if (alive) {
+          setError(e.message || 'Could not load manager feedback')
+          setData(null)
+        }
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [from, to])
+
+  const rows = data?.rows || []
+  const summary = data?.summary || { reward: 0, normal: 0, punish: 0 }
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[14.5px] font-extrabold text-slate-800">Manager Feedback</p>
+        <span className="flex gap-1.5 text-[11px] font-extrabold">
+          <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-emerald-600">{summary.reward} reward</span>
+          <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-slate-500">{summary.normal} normal</span>
+          <span className="rounded-lg bg-rose-50 px-2 py-0.5 text-rose-500">{summary.punish} punish</span>
+        </span>
+      </div>
+      <p className="mb-3 text-[11.5px] text-slate-400">
+        Final evaluations managers submitted in the StudyNal app after reviewing Collab staff reports.
+      </p>
+      {error ? (
+        <p className="py-6 text-center text-[12.5px] font-bold text-rose-500">{error}</p>
+      ) : loading ? (
+        <p className="py-6 text-center text-[13px] text-slate-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-slate-400">No manager evaluations in this period yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead>
+              <tr className="border-b border-slate-100 text-[10.5px] tracking-wide text-slate-400 uppercase">
+                <th className="px-2 py-2 font-bold">Date</th>
+                <th className="px-2 py-2 font-bold">Staff name</th>
+                <th className="px-2 py-2 font-bold">Role</th>
+                <th className="px-2 py-2 font-bold">Evaluate</th>
+                <th className="px-2 py-2 font-bold">Note</th>
+                <th className="px-2 py-2 font-bold">Manager</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-slate-50">
+                  <td className="whitespace-nowrap px-2 py-2 text-slate-400">{r.report_date}</td>
+                  <td className="px-2 py-2 font-bold text-slate-700">{r.employee}</td>
+                  <td className="px-2 py-2 text-slate-400">{r.employee_role}</td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={`inline-block rounded-lg px-2 py-0.5 text-[11px] font-extrabold capitalize ${
+                        EVAL_CHIP[r.evaluation] || 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {r.evaluation}
+                    </span>
+                  </td>
+                  <td className="max-w-[280px] truncate px-2 py-2 text-slate-500" title={r.note}>{r.note}</td>
+                  <td className="px-2 py-2 text-slate-500">{r.manager}</td>
                 </tr>
               ))}
             </tbody>
