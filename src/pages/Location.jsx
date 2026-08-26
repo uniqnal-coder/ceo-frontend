@@ -108,6 +108,9 @@ export default function LocationPage() {
   const [cursor, setCursor] = useState(null)
   const [placing, setPlacing] = useState(false)
   const [radius, setRadius] = useState(200)
+  const [savingRadius, setSavingRadius] = useState(false)
+  // The live refresh must not overwrite a radius the admin is still typing.
+  const radiusEdited = useRef(false)
   const playing = useRef(null)
 
   const isToday = date === todayISO()
@@ -116,7 +119,7 @@ export default function LocationPage() {
     try {
       const res = await api.get(`/api/location/live?date=${date}`)
       setData(res || { people: [], no_signal: [], site: null })
-      if (res?.site?.radius) setRadius(res.site.radius)
+      if (res?.site?.radius && !radiusEdited.current) setRadius(res.site.radius)
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -183,9 +186,27 @@ export default function LocationPage() {
       await api.put('/api/checkins/office-location', { lat, lng, radius: Number(radius) || 200 })
       toast.success('Geofence moved')
       setPlacing(false)
+      radiusEdited.current = false
       load()
     } catch (e) {
       toast.error(e.message)
+    }
+  }
+
+  /** Resize the geofence where it stands, without having to re-place it. */
+  const saveRadius = async () => {
+    const next = Number(radius)
+    if (!Number.isFinite(next) || next < 10) return toast.error('Radius must be at least 10 m')
+    setSavingRadius(true)
+    try {
+      await api.put('/api/checkins/office-location', { radius: next })
+      toast.success(`Geofence radius set to ${next} m`)
+      radiusEdited.current = false
+      load()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setSavingRadius(false)
     }
   }
 
@@ -217,6 +238,8 @@ export default function LocationPage() {
   }, [data])
 
   const trail = history?.trail || []
+  const radiusChanged =
+    data.site != null && Number(radius) > 0 && Number(radius) !== Number(data.site.radius)
 
   return (
     <div className="mx-auto max-w-[1400px] p-5">
@@ -374,14 +397,30 @@ export default function LocationPage() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={radius}
-                  min={10}
-                  onChange={(e) => setRadius(e.target.value)}
-                  className="h-8 w-20 rounded-lg border border-slate-200 px-2 text-[12px] font-bold text-slate-600 outline-none focus:border-brand"
-                  title="Geofence radius in metres"
-                />
+                <label className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-400">Radius</span>
+                  <input
+                    type="number"
+                    value={radius}
+                    min={10}
+                    onChange={(e) => {
+                      radiusEdited.current = true
+                      setRadius(e.target.value)
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && radiusChanged && saveRadius()}
+                    className="h-8 w-20 rounded-lg border border-slate-200 px-2 text-[12px] font-bold text-slate-600 outline-none focus:border-brand"
+                    title="Geofence radius in metres"
+                  />
+                </label>
+                {radiusChanged && (
+                  <button
+                    onClick={saveRadius}
+                    disabled={savingRadius}
+                    className="h-8 rounded-lg bg-emerald-600 px-3 text-[12px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {savingRadius ? 'Saving…' : 'Save'}
+                  </button>
+                )}
                 <button
                   onClick={() => setPlacing((v) => !v)}
                   className={`h-8 rounded-lg px-3 text-[12px] font-bold ${
@@ -393,7 +432,12 @@ export default function LocationPage() {
               </div>
             </div>
             <LiveMap
-              site={data.site}
+              // Draw the radius being typed, so its size can be judged before saving.
+              site={
+                data.site
+                  ? { ...data.site, radius: Number(radius) || data.site.radius }
+                  : null
+              }
               people={data.people || []}
               trail={trail}
               selected={selected}
