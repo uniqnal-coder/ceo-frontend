@@ -12,6 +12,7 @@ export const navGroups = [
     title: 'Reports',
     items: [
       { to: '/reports', label: 'Reports', short: 'Reports', icon: 'fa-chart-column' },
+      { to: '/location', label: 'Location', short: 'Location', icon: 'fa-location-dot' },
       { to: '/tasks-tracking', label: 'Tasks Tracking', short: 'Tracking', icon: 'fa-list-check' },
     ],
   },

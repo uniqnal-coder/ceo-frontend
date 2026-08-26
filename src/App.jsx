@@ -12,6 +12,7 @@ import AutoTask from './pages/AutoTask';
 import Salary from './pages/Salary';
 import Table from './pages/Table';
 import LinkPage from './pages/Link';
+import LocationPage from './pages/Location';
 import PeriodReports from './pages/PeriodReports';
 import ReportCenter from './pages/ReportCenter';
 import TasksTracking from './pages/TasksTracking';
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/announcements" element={<Navigate to="/" replace />} />
           <Route path="/table" element={<Table />} />
           <Route path="/link" element={<LinkPage />} />
+          <Route path="/location" element={<LocationPage />} />
           <Route path="/daily-reports" element={<Navigate to="/reports" replace />} />
           <Route path="/reports" element={<ReportCenter />} />
           <Route path="/reports/classic" element={<PeriodReports />} />
