@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import LiveMap from '../components/LiveMap'
 import LocationChangeRequests from '../components/LocationChangeRequests'
+import LocationAssignments from '../components/LocationAssignments'
 import { api } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -266,7 +267,8 @@ export default function LocationPage() {
         <Kpi label="Mock GPS" value={stats.mock} tone={stats.mock ? 'red' : 'slate'} />
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 space-y-4">
+        <LocationAssignments onChange={load} />
         <LocationChangeRequests onChange={load} />
       </div>
 
