@@ -15,6 +15,8 @@ const MAP_CSS = `
 .lm-live::after{content:'';position:absolute;inset:-6px;border-radius:50%;border:2px solid currentColor;opacity:.6;
   animation:lm-pulse 1.8s ease-out infinite}
 @keyframes lm-pulse{0%{transform:scale(.7);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+.lm-sitepin{white-space:nowrap;transform:translateX(8px);font:700 10.5px/1.6 ui-sans-serif,system-ui;
+  color:#5b21b6;background:rgba(255,255,255,.9);border:1px solid #c4b5fd;border-radius:5px;padding:0 5px}
 .lm-dot{width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.4)}
 .leaflet-container{font:inherit;background:#eef2f7}
 `
@@ -44,6 +46,7 @@ function pinClass(p) {
 
 export default function LiveMap({
   site,
+  sites = [],
   people = [],
   trail = [],
   selected = null,
@@ -81,6 +84,7 @@ export default function LiveMap({
     map.current = m
     layers.current = {
       site: L.layerGroup().addTo(m),
+      sites: L.layerGroup().addTo(m),
       trail: L.layerGroup().addTo(m),
       cursor: L.layerGroup().addTo(m),
       people: L.layerGroup().addTo(m),
@@ -117,6 +121,36 @@ export default function LiveMap({
       interactive: false,
     }).addTo(g)
   }, [site])
+
+  // Named sites people can be assigned to — drawn so a site that has just
+  // been added is visible immediately, with the radius it was given.
+  useEffect(() => {
+    const g = layers.current.sites
+    if (!g) return
+    g.clearLayers()
+    for (const s of sites) {
+      if (s?.lat == null || s?.lng == null) continue
+      L.circle([s.lat, s.lng], {
+        radius: s.radius || 100,
+        color: '#7c3aed',
+        weight: 1.5,
+        dashArray: '5 4',
+        fillColor: '#8b5cf6',
+        fillOpacity: 0.07,
+      })
+        .bindTooltip(`${s.name} · ${s.radius || 100} m`, { direction: 'top' })
+        .addTo(g)
+      L.marker([s.lat, s.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="lm-sitepin">${s.name}</div>`,
+          iconSize: [null, 18],
+          iconAnchor: [0, 9],
+        }),
+        interactive: false,
+      }).addTo(g)
+    }
+  }, [sites])
 
   // One marker per person, coloured by where they are right now.
   useEffect(() => {

@@ -432,6 +432,7 @@ export default function LocationPage() {
               </div>
             </div>
             <LiveMap
+              sites={data.sites || []}
               // Draw the radius being typed, so its size can be judged before saving.
               site={
                 data.site

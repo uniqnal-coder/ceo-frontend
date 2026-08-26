@@ -72,6 +72,7 @@ export default function LocationAssignments({ onChange, office }) {
       setAddingSite(false)
       setSiteId(created.id)
       load()
+      onChange?.()
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -93,6 +94,7 @@ export default function LocationAssignments({ onChange, office }) {
       toast.success(res?.message || 'Site removed')
       if (siteId === site.id) setSiteId('')
       load()
+      onChange?.()
     } catch (e) {
       toast.error(e.message)
     } finally {
