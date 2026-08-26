@@ -50,6 +50,8 @@ export default function LiveMap({
   cursor = null,
   onSelect,
   onMapClick,
+  center,
+  zoom = 16,
   height = 560,
 }) {
   const host = useRef(null)
@@ -73,7 +75,9 @@ export default function LiveMap({
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(m)
-    m.setView([36.19, 44.0], 12)
+    m.setView(center || [36.19, 44.0], center ? zoom : 12)
+    // An explicit starting view is the caller's decision; don't override it.
+    if (center) fitted.current = true
     map.current = m
     layers.current = {
       site: L.layerGroup().addTo(m),

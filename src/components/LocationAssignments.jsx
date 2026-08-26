@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import LiveMap from './LiveMap'
 import { api, toArray } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -9,7 +10,7 @@ import { toast } from '../utils/toast'
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const day = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—')
 
-export default function LocationAssignments({ onChange }) {
+export default function LocationAssignments({ onChange, office }) {
   const [sites, setSites] = useState([])
   const [rows, setRows] = useState([])
   const [roles, setRoles] = useState([])
@@ -26,11 +27,11 @@ export default function LocationAssignments({ onChange }) {
   const [startsOn, setStartsOn] = useState(todayISO())
   const [endsOn, setEndsOn] = useState(todayISO())
 
-  // new site
+  // new site — the point comes from clicking the map
   const [siteName, setSiteName] = useState('')
-  const [siteLat, setSiteLat] = useState('')
-  const [siteLng, setSiteLng] = useState('')
+  const [picked, setPicked] = useState(null)
   const [siteRadius, setSiteRadius] = useState(100)
+  const [removing, setRemoving] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -56,22 +57,41 @@ export default function LocationAssignments({ onChange }) {
   }, [load])
 
   const createSite = async () => {
-    const lat = Number(siteLat)
-    const lng = Number(siteLng)
     if (!siteName.trim()) return toast.error('Give the site a name')
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return toast.error('Enter valid coordinates')
+    if (!picked) return toast.error('Click the map to place the site')
     setBusy(true)
     try {
       const created = await api.post('/api/location/sites', {
         name: siteName.trim(),
-        latitude: lat,
-        longitude: lng,
+        latitude: picked.lat,
+        longitude: picked.lng,
         radius_m: Number(siteRadius) || 100,
       })
       toast.success(`${created.name} added`)
-      setSiteName(''); setSiteLat(''); setSiteLng(''); setSiteRadius(100)
+      setSiteName(''); setPicked(null); setSiteRadius(100)
       setAddingSite(false)
       setSiteId(created.id)
+      load()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Two taps to remove, matching the pattern used elsewhere. */
+  const removeSite = async (site) => {
+    if (removing !== site.id) {
+      setRemoving(site.id)
+      setTimeout(() => setRemoving((v) => (v === site.id ? null : v)), 4000)
+      return
+    }
+    setRemoving(null)
+    setBusy(true)
+    try {
+      const res = await api.del(`/api/location/sites/${site.id}`)
+      toast.success(res?.message || 'Site removed')
+      if (siteId === site.id) setSiteId('')
       load()
     } catch (e) {
       toast.error(e.message)
@@ -118,6 +138,16 @@ export default function LocationAssignments({ onChange }) {
       setBusy(false)
     }
   }
+
+  // Open the picker on a place the admin recognises rather than mid-ocean.
+  const mapCenter = useMemo(() => {
+    if (picked) return [picked.lat, picked.lng]
+    if (sites.length) return [Number(sites[0].latitude), Number(sites[0].longitude)]
+    if (office) return [office.lat, office.lng]
+    return undefined
+    // Only the first resolution matters — the map keeps its own view after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sites, office])
 
   const today = todayISO()
   const shown = useMemo(
@@ -224,31 +254,76 @@ export default function LocationAssignments({ onChange }) {
         </div>
 
         {addingSite && (
-          <div className="mt-3 grid gap-2.5 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="lg:col-span-2">
-              <span className={label}>Site name</span>
-              <input className={field} placeholder="Training Centre" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
-            </div>
-            <div>
-              <span className={label}>Latitude</span>
-              <input className={field} placeholder="34.62451" value={siteLat} onChange={(e) => setSiteLat(e.target.value)} />
-            </div>
-            <div>
-              <span className={label}>Longitude</span>
-              <input className={field} placeholder="45.30305" value={siteLng} onChange={(e) => setSiteLng(e.target.value)} />
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <span className={label}>Radius (m)</span>
-                <input className={field} type="number" value={siteRadius} onChange={(e) => setSiteRadius(e.target.value)} />
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <div className="mb-2.5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="lg:col-span-2">
+                <span className={label}>Site name</span>
+                <input className={field} placeholder="Training Centre" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
               </div>
-              <button
-                onClick={createSite}
-                disabled={busy}
-                className="h-9 rounded-lg bg-slate-800 px-3 text-[12.5px] font-bold text-white disabled:opacity-40"
-              >
-                Add
-              </button>
+              <div>
+                <span className={label}>Radius (m)</span>
+                <input className={field} type="number" min={10} value={siteRadius} onChange={(e) => setSiteRadius(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={createSite}
+                  disabled={busy || !picked}
+                  className="h-9 w-full rounded-lg bg-slate-800 px-3 text-[12.5px] font-bold text-white disabled:opacity-40"
+                >
+                  Add site
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[12px] font-bold text-slate-500">
+                {picked
+                  ? 'Click again to move it.'
+                  : 'Click the map to place the site.'}
+              </span>
+              {picked && (
+                <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-[11.5px] font-bold text-slate-600">
+                  {picked.lat.toFixed(5)}, {picked.lng.toFixed(5)}
+                </span>
+              )}
+            </div>
+            <LiveMap
+              site={picked ? { lat: picked.lat, lng: picked.lng, radius: Number(siteRadius) || 100 } : null}
+              people={[]}
+              center={mapCenter}
+              zoom={picked ? 17 : 14}
+              onMapClick={(lat, lng) => setPicked({ lat, lng })}
+              height={300}
+            />
+          </div>
+        )}
+
+        {/* existing sites */}
+        {!!sites.length && (
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <span className={label}>Saved sites</span>
+            <div className="flex flex-wrap gap-1.5">
+              {sites.map((st) => (
+                <span
+                  key={st.id}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1 pl-2.5 pr-1 text-[12px] font-bold text-slate-600"
+                >
+                  {st.name}
+                  <span className="font-mono text-[10.5px] font-normal text-slate-400">{st.radius_m} m</span>
+                  <button
+                    onClick={() => removeSite(st)}
+                    disabled={busy}
+                    title="Remove this site"
+                    className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold transition disabled:opacity-40 ${
+                      removing === st.id
+                        ? 'bg-rose-600 text-white'
+                        : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'
+                    }`}
+                  >
+                    {removing === st.id ? 'Confirm?' : '\u00d7'}
+                  </button>
+                </span>
+              ))}
             </div>
           </div>
         )}

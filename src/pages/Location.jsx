@@ -268,7 +268,7 @@ export default function LocationPage() {
       </div>
 
       <div className="mb-4 space-y-4">
-        <LocationAssignments onChange={load} />
+        <LocationAssignments onChange={load} office={data.site} />
         <LocationChangeRequests onChange={load} />
       </div>
 
