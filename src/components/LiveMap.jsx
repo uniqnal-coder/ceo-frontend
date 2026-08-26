@@ -65,6 +65,9 @@ export default function LiveMap({
   useEffect(() => {
     ensureStyle()
     if (map.current || !host.current) return
+    // React remounts this component in development; the previous map is gone,
+    // so its framing must not be treated as already done.
+    fitted.current = false
     const m = L.map(host.current, { zoomControl: true, attributionControl: true })
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -153,7 +156,14 @@ export default function LiveMap({
     if (!fitted.current && (pts.length || site)) {
       const all = site ? [...pts, [site.lat, site.lng]] : pts
       if (all.length) {
-        map.current?.fitBounds(L.latLngBounds(all).pad(0.25), { maxZoom: 17 })
+        const bounds = L.latLngBounds(all).pad(0.25)
+        // A single point (or several on the same spot) gives a zero-size box,
+        // which Leaflet resolves by zooming way out. Frame it directly.
+        if (all.length === 1 || !bounds.isValid() || bounds.getNorthEast().equals(bounds.getSouthWest())) {
+          map.current?.setView(all[0], 17)
+        } else {
+          map.current?.fitBounds(bounds, { maxZoom: 17 })
+        }
         fitted.current = true
       }
     }

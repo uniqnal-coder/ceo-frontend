@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import LiveMap from '../components/LiveMap'
+import LocationChangeRequests from '../components/LocationChangeRequests'
 import { api } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -22,6 +23,9 @@ function ago(seconds) {
 
 const metres = (m) => (m == null ? '—' : m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`)
 
+const minutes = (s) =>
+  s == null ? null : s < 60 ? `${s}s` : `${Math.round(s / 60)}m`
+
 function statusOf(p) {
   if (p.no_signal) return { label: 'No signal', cls: 'bg-slate-100 text-slate-500' }
   if (p.is_mock) return { label: 'Mock GPS', cls: 'bg-red-100 text-red-700' }
@@ -41,6 +45,52 @@ function Kpi({ label, value, tone = 'slate' }) {
     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`text-[22px] font-extrabold ${tones[tone]}`}>{value}</div>
+    </div>
+  )
+}
+
+function PunchVerdict({ label, at, distance, outside, late }) {
+  if (!at) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-2.5 text-[12.5px] font-bold text-slate-400">
+        {label} — not recorded
+      </div>
+    )
+  }
+  const tone = outside
+    ? 'border-amber-200 bg-amber-50'
+    : outside === false
+      ? 'border-emerald-200 bg-emerald-50'
+      : 'border-slate-200 bg-white'
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 ${tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12.5px] font-extrabold text-slate-700">
+          {label} · {clock(at)}
+        </span>
+        <div className="flex gap-1">
+          {outside === true && (
+            <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+              Out of location
+            </span>
+          )}
+          {outside === false && (
+            <span className="rounded bg-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+              Onsite
+            </span>
+          )}
+          {late && (
+            <span className="rounded bg-rose-200 px-1.5 py-0.5 text-[10px] font-bold text-rose-800">
+              Late
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="mt-0.5 text-[11.5px] text-slate-500">
+        {distance == null
+          ? 'No position recorded with this punch'
+          : `${metres(distance)} from their registered location`}
+      </p>
     </div>
   )
 }
@@ -216,6 +266,10 @@ export default function LocationPage() {
         <Kpi label="Mock GPS" value={stats.mock} tone={stats.mock ? 'red' : 'slate'} />
       </div>
 
+      <div className="mb-4">
+        <LocationChangeRequests onChange={load} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         {/* People */}
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -274,6 +328,25 @@ export default function LocationPage() {
                       {p.no_signal ? 'never reported' : `${metres(p.distance_m)} · ${ago(p.age_seconds)}`}
                     </span>
                   </div>
+                  {(p.punch_out_of_location || p.punch_late || p.location_off_seconds) && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {p.punch_out_of_location && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                          Out of location
+                        </span>
+                      )}
+                      {p.punch_late && (
+                        <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">
+                          Late
+                        </span>
+                      )}
+                      {p.location_off_seconds ? (
+                        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                          GPS off {minutes(p.location_off_seconds)}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </button>
               )
             })}
@@ -379,6 +452,41 @@ export default function LocationPage() {
                     </span>
                     <span>{clock(trail[trail.length - 1]?.recorded_at)}</span>
                   </div>
+                </div>
+              )}
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <PunchVerdict
+                  label="Check-in"
+                  at={history.punch?.check_in_time}
+                  distance={history.punch?.baseline_distance_m}
+                  outside={history.punch?.out_of_location}
+                  late={history.punch?.is_late}
+                />
+                <PunchVerdict
+                  label="Check-out"
+                  at={history.punch?.check_out_time}
+                  distance={history.punch?.checkout_distance_m}
+                  outside={history.punch?.checkout_out_of_location}
+                />
+              </div>
+
+              {!!history.outages?.length && (
+                <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                  <h4 className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Location services switched off
+                  </h4>
+                  <ul className="space-y-0.5">
+                    {history.outages.map((o, i) => (
+                      <li key={i} className="text-[12.5px] text-slate-600">
+                        <span className="font-bold">{clock(o.started_at)}</span> →{' '}
+                        <span className="font-bold">{clock(o.ended_at)}</span>{' '}
+                        <span className="text-slate-400">
+                          ({minutes(o.seconds) || 'still off'})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

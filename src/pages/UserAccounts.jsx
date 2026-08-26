@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../utils/toast';
 import { api, toArray } from '../api/client';
+import BaselineLocationDialog from '../components/BaselineLocationDialog';
 
 const ROLE_META = {
   admin: { label: 'Admin', badge: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
@@ -56,6 +57,8 @@ export default function UserAccounts() {
   const [statusFilter, setStatusFilter] = useState('');
   const [editUser, setEditUser] = useState(null);
   const [pwUser, setPwUser] = useState(null);
+  // View Location / Reset Location both live in one dialog.
+  const [locationUser, setLocationUser] = useState(null);
   const me = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
   }, []);
@@ -370,6 +373,14 @@ export default function UserAccounts() {
                           </button>
                           <button
                             type="button"
+                            title="View registered location"
+                            onClick={() => setLocationUser(u)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-[12px] text-slate-500 transition hover:border-emerald-500 hover:text-emerald-500"
+                          >
+                            <i className="fas fa-location-dot" />
+                          </button>
+                          <button
+                            type="button"
                             title="Set a new password"
                             onClick={() => setPwUser(u)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-[12px] text-slate-500 transition hover:border-amber-500 hover:text-amber-500"
@@ -436,6 +447,13 @@ export default function UserAccounts() {
           user={pwUser}
           onClose={() => setPwUser(null)}
           onSaved={() => { setPwUser(null); load(); }}
+        />
+      )}
+
+      {locationUser && (
+        <BaselineLocationDialog
+          user={locationUser}
+          onClose={() => setLocationUser(null)}
         />
       )}
     </div>
