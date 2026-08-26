@@ -92,15 +92,18 @@ export default function UserAccounts() {
   const hasQuery = !!(q.trim() || roleFilter || statusFilter);
   // Every job title in use (Supervisor, Manager, Accounter, …) with a count,
   // so the picker can drill into "which staff" — not just the access level.
-  const jobTitles = useMemo(() => {
-    const counts = new Map();
-    for (const u of users || []) {
-      const t = (u.job_title || '').trim();
-      if (t) counts.set(t, (counts.get(t) || 0) + 1);
-    }
-    return [...counts.entries()]
-      .map(([title, count]) => ({ title, count }))
-      .sort((a, b) => a.title.localeCompare(b.title));
+  const { staffRoles, subjects } = useMemo(() => {
+    const tally = (kind) => {
+      const counts = new Map();
+      for (const u of users || []) {
+        const t = (u.job_title || '').trim();
+        if (t && u.job_kind === kind) counts.set(t, (counts.get(t) || 0) + 1);
+      }
+      return [...counts.entries()]
+        .map(([title, count]) => ({ title, count }))
+        .sort((a, b) => a.title.localeCompare(b.title));
+    };
+    return { staffRoles: tally('staff_role'), subjects: tally('subject') };
   }, [users]);
 
   const shown = useMemo(() => {
@@ -227,7 +230,14 @@ export default function UserAccounts() {
               ))}
             </optgroup>
             <optgroup label="Staff role">
-              {jobTitles.map(({ title, count }) => (
+              {staffRoles.map(({ title, count }) => (
+                <option key={title} value={`job:${title}`}>
+                  {title} · {count}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Subject">
+              {subjects.map(({ title, count }) => (
                 <option key={title} value={`job:${title}`}>
                   {title} · {count}
                 </option>
@@ -327,7 +337,9 @@ export default function UserAccounts() {
                           {u.job_title || meta.label}
                         </span>
                         {u.job_title && (
-                          <span className="mt-1 block text-[10.5px] text-slate-400">{meta.label} access</span>
+                          <span className="mt-1 block text-[10.5px] text-slate-400">
+                            {u.job_kind === 'subject' ? 'Subject' : 'Staff role'} · {meta.label} access
+                          </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3">
