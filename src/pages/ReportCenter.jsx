@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from '../utils/toast'
 import { api } from '../api/client'
 import { ReportCard } from '../components/ReportCard'
+import { PersonBreakdown, TypeExplainer } from '../components/ReportTypeDetail'
 
 const todayISO = () => {
   const d = new Date()
@@ -94,6 +95,15 @@ export default function ReportCenter() {
     tasks: ['Late Task'],
     feedback: ['Feedback Note'],
   }
+  /** A person's reasons, scoped to the chosen type so the row agrees with the
+   *  chart above it. */
+  const reasonsFor = (p) => {
+    const list = p.reasons || []
+    if (type === 'all') return list
+    const allowed = new Set(TYPE_REASONS[type] || [])
+    return list.filter((r) => allowed.has(r.label))
+  }
+
   const punishOf = (p) => {
     const c = p.components
     if (type === 'attendance') return c.attendance.absent + c.attendance.late + c.attendance.unverified + c.attendance.offsite
@@ -142,6 +152,52 @@ export default function ReportCenter() {
       deltas: false,
     }
   }, [data, people, type, q]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The numbers that matter for the chosen type — the generic five said the
+   *  same thing whichever type was picked, which is why no type read clearly. */
+  const typeStats = useMemo(() => {
+    if (!data?.people?.length || type === 'all') return null
+    const list = data.people
+    const sum = (f) => list.reduce((n, p) => n + (f(p.components) || 0), 0)
+    const withAny = (f) => list.filter((p) => (f(p.components) || 0) > 0).length
+    if (type === 'attendance') {
+      return [
+        { label: 'Absent days', value: sum((c) => c.attendance.absent) },
+        { label: 'Late arrivals', value: sum((c) => c.attendance.late) },
+        { label: 'Off-site punches', value: sum((c) => c.attendance.offsite) },
+        { label: 'Unverified', value: sum((c) => c.attendance.unverified) },
+        { label: 'People affected', value: withAny((c) => c.attendance.raw) },
+      ]
+    }
+    if (type === 'monitor') {
+      const expected = list[0]?.components?.monitor?.expected || 0
+      return [
+        { label: 'Reports missed', value: sum((c) => c.monitor.missing) },
+        { label: 'Expected each', value: expected },
+        { label: 'People with gaps', value: withAny((c) => c.monitor.missing) },
+        { label: 'Fully reported', value: list.length - withAny((c) => c.monitor.missing) },
+        { label: 'People scored', value: list.length },
+      ]
+    }
+    if (type === 'tasks') {
+      const total = sum((c) => c.tasks.total)
+      const overdue = sum((c) => c.tasks.overdue)
+      return [
+        { label: 'Overdue items', value: overdue },
+        { label: 'Total items', value: total },
+        { label: 'On time', value: Math.max(0, total - overdue) },
+        { label: 'Overdue share', value: total ? `${Math.round((overdue / total) * 100)}%` : '0%' },
+        { label: 'People affected', value: withAny((c) => c.tasks.overdue) },
+      ]
+    }
+    return [
+      { label: 'Notes recorded', value: sum((c) => c.feedback.count) },
+      { label: 'People with notes', value: withAny((c) => c.feedback.count) },
+      { label: 'Clean record', value: list.length - withAny((c) => c.feedback.count) },
+      { label: 'Most on one person', value: list.reduce((m, p) => Math.max(m, p.components.feedback.count || 0), 0) },
+      { label: 'People scored', value: list.length },
+    ]
+  }, [data, type])
 
   const s = view?.summary
   const prev = data?.prev
@@ -288,6 +344,8 @@ export default function ReportCenter() {
         </div>
       )}
 
+      <TypeExplainer type={type} from={from} to={to} />
+
       {type === 'monitor' && <SupervisionPanel from={from} to={to} />}
       {type === 'feedback' && <ManagerFeedbackPanel from={from} to={to} />}
 
@@ -307,6 +365,17 @@ export default function ReportCenter() {
       ) : (
         <>
           {/* Stat cards */}
+          {typeStats && (
+            <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {typeStats.map((x) => (
+                <div key={x.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{x.label}</p>
+                  <p className="mt-1 text-[22px] font-extrabold tabular-nums text-slate-800">{x.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
             <StatCard icon="fa-chart-line" label="Total Records" value={s.total_records.toLocaleString()} extra={dl(delta(s.total_records, prev?.total_records, true))} />
             <StatCard
@@ -398,17 +467,15 @@ export default function ReportCenter() {
                         </td>
                         <td className="px-2 py-3">
                           <div className="flex flex-wrap gap-1">
-                            {p.reasons.slice(0, 2).map((r) => (
-                              <span key={r.label} className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500">
+                            {/* Every reason, with its count — two of six and no
+                                number told an admin nothing about what happened. */}
+                            {reasonsFor(p).map((r) => (
+                              <span key={r.label} className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
                                 {r.label}
+                                <span className="ml-1 font-mono text-slate-400">×{r.count}</span>
                               </span>
                             ))}
-                            {p.reasons.length > 2 && (
-                              <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-400">
-                                +{p.reasons.length - 2}
-                              </span>
-                            )}
-                            {!p.reasons.length && <span className="text-[11px] text-slate-300">—</span>}
+                            {!reasonsFor(p).length && <span className="text-[11px] text-slate-300">—</span>}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-2 py-3 text-right">
@@ -453,7 +520,7 @@ export default function ReportCenter() {
         </>
       )}
 
-      {detail && <PersonDetailDialog person={detail} weights={data?.weights} onClose={() => setDetail(null)} />}
+      {detail && <PersonDetailDialog person={detail} type={type} onClose={() => setDetail(null)} />}
     </div>
   )
 }
@@ -576,26 +643,16 @@ function ScoreExplainer({ person, weights }) {
   )
 }
 
-function PersonDetailDialog({ person, weights, onClose }) {
-  const c = person.components
+function PersonDetailDialog({ person, type, onClose }) {
   const m = SEVERITY_META[person.severity]
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[16px] font-extrabold text-slate-800">{person.name}</p>
           <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase ${m.chip}`}>{m.label} · {person.score.toFixed(2)}</span>
         </div>
-        <div className="space-y-2 text-[12.5px]">
-          <DetailRow label={`Attendance (${weights.attendance * 100}%)`} raw={c.attendance.raw}
-            note={`${c.attendance.absent} absent · ${c.attendance.late} late · ${c.attendance.unverified} unverified · ${c.attendance.offsite} off-site of ${c.attendance.workdays} workdays`} />
-          <DetailRow label={`Monitor (${weights.monitor * 100}%)`} raw={c.monitor.raw}
-            note={`${c.monitor.missing} of ${c.monitor.expected} daily reports missing`} />
-          <DetailRow label={`Tasks (${weights.tasks * 100}%)`} raw={c.tasks.raw}
-            note={`${c.tasks.overdue} of ${c.tasks.total} task items past deadline`} />
-          <DetailRow label={`Feedback (${weights.feedback * 100}%)`} raw={c.feedback.raw}
-            note={`${c.feedback.count} feedback note${c.feedback.count === 1 ? '' : 's'} recorded`} />
-        </div>
+        <PersonBreakdown person={person} type={type} />
         {person.base_salary > 0 && (
           <p className="mt-4 rounded-xl bg-slate-50 p-3 font-mono text-[12px] text-slate-600">
             {fmtMoney(person.base_salary)} × {(person.deduction_ratio * 100).toFixed(1)}% ={' '}
@@ -611,20 +668,6 @@ function PersonDetailDialog({ person, weights, onClose }) {
   )
 }
 
-function DetailRow({ label, raw, note }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="font-extrabold text-slate-700">{label}</span>
-        <span className="font-mono text-[12px] font-bold text-slate-600">{raw.toFixed(2)} / 2</span>
-      </div>
-      <div className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-brand" style={{ width: `${(raw / 2) * 100}%` }} />
-      </div>
-      <p className="text-[11px] text-slate-400">{note}</p>
-    </div>
-  )
-}
 
 /* Supervisor daily reviews (Do / Don't) from the StudyNal app — the raw
    submissions behind the Monitor component's daily reports. */
