@@ -40,8 +40,8 @@ export const TYPE_GUIDE = {
   feedback: {
     title: 'Feedback',
     measures:
-      'Notes a manager recorded against the person — a Punish or Risk verdict on a Colab report files one.',
-    formula: 'notes × 0.5, capped at 2',
+      'The verdict a manager gave after reading this person\u2019s Colab reports. Reward and Normal cost nothing; Risk is a half fault, Punish a full one. Standalone HR notes count as a Risk.',
+    formula: 'punish × 1 + risk × 0.5 + HR note × 0.5, capped at 2',
     weight: WEIGHTS.feedback,
   },
 }
@@ -123,9 +123,15 @@ export function PersonBreakdown({ person, type }) {
       label: 'Feedback',
       raw: n(c.feedback?.raw),
       weight: WEIGHTS.feedback,
-      facts: [['Notes recorded', n(c.feedback?.count)]],
+      facts: [
+        ['Punish', n(c.feedback?.punishes)],
+        ['Risk', n(c.feedback?.risks)],
+        ['Reward', n(c.feedback?.rewards)],
+        ['Normal', n(c.feedback?.normals)],
+        ['HR notes', n(c.feedback?.notes)],
+      ],
     },
-  ]
+  ].map((r) => ({ ...r, money: n(c[r.key]?.deducted), share: n(c[r.key]?.share) }))
   const shown = type === 'all' ? rows : rows.filter((r) => r.key === type)
 
   return (
@@ -151,6 +157,15 @@ export function PersonBreakdown({ person, type }) {
                 style={{ width: `${Math.min(100, (r.raw / 2) * 100)}%` }}
               />
             </div>
+            {person.base_salary > 0 && (
+              <p className="mt-2 text-[11px] text-slate-400">
+                Costs{' '}
+                <span className="font-mono font-bold text-rose-500">
+                  −{r.money.toLocaleString()} IQD
+                </span>{' '}
+                — {(r.share * 100).toFixed(0)}% of this person&apos;s deduction
+              </p>
+            )}
             <dl className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
               {r.facts.map(([k, v]) => (
                 <div key={k} className="flex items-baseline gap-1.5">

@@ -93,7 +93,7 @@ export default function ReportCenter() {
     attendance: ['Check-in Fault', 'Verification Fault', 'GPS Fault'],
     monitor: ['Missed Report'],
     tasks: ['Late Task'],
-    feedback: ['Feedback Note'],
+    feedback: ['Manager Punish', 'Manager Risk', 'Feedback Note'],
   }
   /** A person's reasons, scoped to the chosen type so the row agrees with the
    *  chart above it. */
@@ -103,6 +103,16 @@ export default function ReportCenter() {
     const allowed = new Set(TYPE_REASONS[type] || [])
     return list.filter((r) => allowed.has(r.label))
   }
+
+  /** The money this row actually costs. Under a single type that is the
+   *  factor's own share of the deduction, not the combined figure — the
+   *  shares add back up to the total when you switch to All reports. */
+  const moneyOf = (p) =>
+    type === 'all' ? p.deducted : (p.components?.[type]?.deducted ?? 0)
+  const ratioOf = (p) =>
+    type === 'all'
+      ? p.deduction_ratio
+      : (p.deduction_ratio ?? 0) * (p.components?.[type]?.share ?? 0)
 
   const punishOf = (p) => {
     const c = p.components
@@ -190,12 +200,14 @@ export default function ReportCenter() {
         { label: 'People affected', value: withAny((c) => c.tasks.overdue) },
       ]
     }
+    // The verdicts themselves, not just a note tally — reward and normal are
+    // the whole point of the review and cost nothing, so show them too.
     return [
-      { label: 'Notes recorded', value: sum((c) => c.feedback.count) },
-      { label: 'People with notes', value: withAny((c) => c.feedback.count) },
-      { label: 'Clean record', value: list.length - withAny((c) => c.feedback.count) },
-      { label: 'Most on one person', value: list.reduce((m, p) => Math.max(m, p.components.feedback.count || 0), 0) },
-      { label: 'People scored', value: list.length },
+      { label: 'Punish', value: sum((c) => c.feedback.punishes) },
+      { label: 'Risk', value: sum((c) => c.feedback.risks) },
+      { label: 'Reward', value: sum((c) => c.feedback.rewards) },
+      { label: 'HR notes', value: sum((c) => c.feedback.notes) },
+      { label: 'Clean record', value: list.length - withAny((c) => c.feedback.raw) },
     ]
   }, [data, type])
 
@@ -227,7 +239,9 @@ export default function ReportCenter() {
     lines.push('')
     lines.push(
       ['Name', 'Role', 'Score', 'Severity', 'Attendance raw', 'Monitor raw', 'Tasks raw', 'Feedback raw',
-        'Absent', 'Late', 'Overdue tasks', 'Missed reports', 'Base salary (IQD)', 'Deduction %', 'Deducted (IQD)', 'Net pay (IQD)', 'Top reasons']
+        'Absent', 'Late', 'Overdue tasks', 'Missed reports', 'Base salary (IQD)', 'Deduction %', 'Deducted (IQD)',
+        'Deducted: attendance', 'Deducted: monitor', 'Deducted: tasks', 'Deducted: feedback',
+        'Net pay (IQD)', 'Top reasons']
         .map(esc).join(',')
     )
     for (const p of data.people) {
@@ -235,7 +249,9 @@ export default function ReportCenter() {
       lines.push(
         [p.name, p.role, p.score, p.severity, c.attendance.raw, c.monitor.raw, c.tasks.raw, c.feedback.raw,
           c.attendance.absent, c.attendance.late, c.tasks.overdue, c.monitor.missing,
-          p.base_salary, `${(p.deduction_ratio * 100).toFixed(1)}%`, p.deducted, p.net_pay,
+          p.base_salary, `${(p.deduction_ratio * 100).toFixed(1)}%`, p.deducted,
+          c.attendance.deducted, c.monitor.deducted, c.tasks.deducted, c.feedback.deducted,
+          p.net_pay,
           p.reasons.map((r) => `${r.label} x${r.count}`).join(' | ')]
           .map(esc).join(',')
       )
@@ -433,7 +449,9 @@ export default function ReportCenter() {
                     <th className="px-2 py-2">{type === 'all' ? 'Punishment score' : `${TYPES.find((t) => t.key === type)?.label} score`}</th>
                     <th className="px-2 py-2">Severity</th>
                     <th className="px-2 py-2">Top reasons</th>
-                    <th className="px-2 py-2 text-right">Deduction</th>
+                    <th className="px-2 py-2 text-right">
+                      {type === 'all' ? 'Deduction' : `Deduction from ${TYPES.find((t) => t.key === type)?.label.toLowerCase()}`}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -481,7 +499,13 @@ export default function ReportCenter() {
                         <td className="whitespace-nowrap px-2 py-3 text-right">
                           {p.base_salary > 0 ? (
                             <span className="font-mono text-[12px] font-bold text-rose-500">
-                              −{fmtMoney(p.deducted)} <span className="text-slate-400">({(p.deduction_ratio * 100).toFixed(1)}%)</span>
+                              −{fmtMoney(moneyOf(p))}{' '}
+                              <span className="text-slate-400">({(ratioOf(p) * 100).toFixed(1)}%)</span>
+                              {type !== 'all' && (
+                                <span className="ml-1 font-sans text-[10px] font-bold text-slate-300">
+                                  of −{fmtMoney(p.deducted)}
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span className="text-[11px] text-slate-300">no salary set</span>
@@ -671,10 +695,62 @@ function PersonDetailDialog({ person, type, onClose }) {
 
 /* Supervisor daily reviews (Do / Don't) from the StudyNal app — the raw
    submissions behind the Monitor component's daily reports. */
+/* Ten rows a page, with a windowed page list so a long period does not spill
+   a hundred buttons across the card. */
+const PANEL_PAGE = 10
+
+function Pager({ page, pages, total, noun, onPage }) {
+  if (total === 0) return null
+  const window = []
+  for (let n = Math.max(1, page - 2); n <= Math.min(pages, page + 2); n += 1) window.push(n)
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[11.5px] text-slate-400">
+        Showing {(page - 1) * PANEL_PAGE + 1} to {Math.min(page * PANEL_PAGE, total)} of {total} {noun}
+      </p>
+      {pages > 1 && (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onPage(Math.max(1, page - 1))}
+            disabled={page === 1}
+            className="h-8 rounded-lg px-2 text-[12px] font-extrabold text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+          >
+            <i className="fas fa-chevron-left text-[10px]" />
+          </button>
+          {window[0] > 1 && <span className="px-1 text-[12px] text-slate-300">…</span>}
+          {window.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onPage(n)}
+              className={`h-8 w-8 rounded-lg text-[12px] font-extrabold transition ${
+                n === page ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+          {window[window.length - 1] < pages && <span className="px-1 text-[12px] text-slate-300">…</span>}
+          <button
+            type="button"
+            onClick={() => onPage(Math.min(pages, page + 1))}
+            disabled={page === pages}
+            className="h-8 rounded-lg px-2 text-[12px] font-extrabold text-slate-500 transition hover:bg-slate-100 disabled:opacity-30"
+          >
+            <i className="fas fa-chevron-right text-[10px]" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SupervisionPanel({ from, to }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     let alive = true
@@ -684,7 +760,10 @@ function SupervisionPanel({ from, to }) {
       setError('')
       try {
         const d = await api.get(`/api/supervision/reports?from=${from}&to=${to}`)
-        if (alive) setRows(d.rows || [])
+        if (alive) {
+          setRows(d.rows || [])
+          setPage(1)
+        }
       } catch (e) {
         if (alive) {
           setError(e.message || 'Could not load supervision reports')
@@ -696,6 +775,9 @@ function SupervisionPanel({ from, to }) {
     })()
     return () => { alive = false }
   }, [from, to])
+
+  const pages = Math.max(1, Math.ceil(rows.length / PANEL_PAGE))
+  const shown = rows.slice((page - 1) * PANEL_PAGE, page * PANEL_PAGE)
 
   return (
     <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -728,7 +810,7 @@ function SupervisionPanel({ from, to }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {shown.map((r) => (
                 <tr key={r.id} className="border-b border-slate-50">
                   <td className="whitespace-nowrap px-2 py-2 text-slate-400">{r.report_date}</td>
                   <td className="px-2 py-2 font-bold text-slate-700">{r.employee}</td>
@@ -748,6 +830,7 @@ function SupervisionPanel({ from, to }) {
               ))}
             </tbody>
           </table>
+          <Pager page={page} pages={pages} total={rows.length} noun="marks" onPage={setPage} />
         </div>
       )}
     </div>
@@ -769,6 +852,7 @@ function ManagerFeedbackPanel({ from, to }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [detail, setDetail] = useState(null)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     let alive = true
@@ -778,7 +862,10 @@ function ManagerFeedbackPanel({ from, to }) {
       setError('')
       try {
         const d = await api.get(`/api/manager/feedback?from=${from}&to=${to}`)
-        if (alive) setData(d)
+        if (alive) {
+          setData(d)
+          setPage(1)
+        }
       } catch (e) {
         if (alive) {
           setError(e.message || 'Could not load manager feedback')
@@ -793,6 +880,8 @@ function ManagerFeedbackPanel({ from, to }) {
 
   const rows = data?.rows || []
   const summary = data?.summary || { reward: 0, normal: 0, punish: 0, risk: 0 }
+  const pages = Math.max(1, Math.ceil(rows.length / PANEL_PAGE))
+  const shown = rows.slice((page - 1) * PANEL_PAGE, page * PANEL_PAGE)
 
   return (
     <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -828,7 +917,7 @@ function ManagerFeedbackPanel({ from, to }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {shown.map((r) => (
                 <tr
                   key={r.id}
                   onClick={() => setDetail(r)}
@@ -861,6 +950,7 @@ function ManagerFeedbackPanel({ from, to }) {
               ))}
             </tbody>
           </table>
+          <Pager page={page} pages={pages} total={rows.length} noun="evaluations" onPage={setPage} />
         </div>
       )}
       {detail && <FeedbackDetailDialog row={detail} onClose={() => setDetail(null)} />}
