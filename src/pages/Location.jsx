@@ -349,10 +349,21 @@ export default function LocationPage() {
                   </div>
                   <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-400">
                     <span className="truncate">{p.role || '—'}</span>
-                    <span>
-                      {p.no_signal ? 'never reported' : `${metres(p.distance_m)} · ${ago(p.age_seconds)}`}
+                    <span className="tabular-nums">
+                      {p.check_in_time ? `in ${clock(p.check_in_time)}` : ''}
+                      {p.check_out_time ? ` · out ${clock(p.check_out_time)}` : p.check_in_time ? ' · on shift' : ''}
                     </span>
                   </div>
+                  {!p.no_signal && (
+                    <div className="mt-0.5 text-[11px] text-slate-400">
+                      {metres(p.distance_m)} away
+                      {p.position_source === 'ping'
+                        ? ` · live ${ago(p.age_seconds)}`
+                        : p.position_source === 'check_out'
+                          ? ' · position at check-out'
+                          : ' · position at check-in'}
+                    </div>
+                  )}
                   {(p.punch_out_of_location || p.punch_late || p.location_off_seconds) && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {p.punch_out_of_location && (

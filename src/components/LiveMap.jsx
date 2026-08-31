@@ -173,10 +173,26 @@ export default function LiveMap({
         }),
         zIndexOffset: isSel ? 1000 : 0,
       })
+      const t = (iso) =>
+        iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
+      const inAt = t(p.check_in_time)
+      const outAt = t(p.check_out_time)
       marker.bindTooltip(
-        `<b>${p.name}</b><br>${p.role || ''}${
-          p.distance_m != null ? `<br>${p.distance_m} m from site` : ''
-        }`,
+        [
+          `<b>${p.name}</b>`,
+          p.role || null,
+          inAt ? `In ${inAt}${outAt ? ` · Out ${outAt}` : ' · still on shift'}` : null,
+          p.distance_m != null ? `${p.distance_m} m from their location` : null,
+          p.position_source === 'ping'
+            ? 'live position'
+            : p.position_source === 'check_out'
+              ? 'where they checked out'
+              : p.position_source === 'check_in'
+                ? 'where they checked in'
+                : null,
+        ]
+          .filter(Boolean)
+          .join('<br>'),
         { direction: 'top', offset: [0, -18] }
       )
       if (onSelect) marker.on('click', () => onSelect(p.user_id))
