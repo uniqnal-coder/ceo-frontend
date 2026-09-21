@@ -132,7 +132,7 @@ export default function Link() {
               <option value="">Choose a supervisor or manager…</option>
               {options.supervisors.map((s) => (
                 <option key={s.user_id} value={s.user_id}>
-                  {s.name}{s.role ? ` — ${s.role}` : ''}
+                  {s.name}{(s.category || s.role) ? ` — ${s.category || s.role}` : ''}
                 </option>
               ))}
             </select>
@@ -159,7 +159,7 @@ export default function Link() {
                   </span>
                   <span className="flex-1">
                     <span className="block text-[13.5px] font-bold text-slate-700">{e.name}</span>
-                    <span className="block text-[11.5px] text-slate-400">{e.role}</span>
+                    <span className="block text-[11.5px] text-slate-400">{e.category || e.role}</span>
                   </span>
                   <input
                     type="checkbox"
