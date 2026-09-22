@@ -20,14 +20,14 @@ export const TYPE_GUIDE = {
     measures:
       'Days missed, arrivals after 08:30, punches that carried no verified selfie, and check-ins away from the registered location.',
     formula:
-      '(absent×1 + late×0.5 + offsite×0.25 + unverified×0.25) ÷ working days × 2, capped at 2',
+      '(absent×1 + late×0.5 + offsite×0.25 + unverified×0.25) ÷ working days (at least 22, a month) × 2, capped at 2',
     weight: WEIGHTS.attendance,
   },
   monitor: {
     title: 'Monitor',
     measures:
       'Whether a daily report exists for each working day. A supervisor’s Do/Don’t review counts as one.',
-    formula: 'missed days ÷ working days × 2, capped at 2',
+    formula: 'missed days ÷ working days (at least 22, a month) × 2, capped at 2',
     weight: WEIGHTS.monitor,
   },
   tasks: {
