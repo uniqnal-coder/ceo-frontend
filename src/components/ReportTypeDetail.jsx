@@ -34,14 +34,14 @@ export const TYPE_GUIDE = {
     title: 'Tasks',
     measures:
       'The share of assigned items already past their deadline and still not completed. Approved leave days are excluded.',
-    formula: 'overdue items ÷ total items × 2, capped at 2',
+    formula: 'overdue items ÷ total items (at least 22, a month of working days) × 2, capped at 2',
     weight: WEIGHTS.tasks,
   },
   feedback: {
     title: 'Feedback',
     measures:
       'The verdict a manager gave after reading this person\u2019s Colab reports. Reward and Normal cost nothing; Risk is a half fault, Punish a full one. Standalone HR notes count as a Risk.',
-    formula: 'punish × 1 + risk × 0.5 + HR note × 0.5, capped at 2',
+    formula: '(punish × 1 + risk × 0.5 + HR note × 0.5) ÷ working days (at least 22, a month) × 2, capped at 2',
     weight: WEIGHTS.feedback,
   },
 }
